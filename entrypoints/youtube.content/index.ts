@@ -35,6 +35,7 @@ import {
 } from '../../src/settings/subtitle';
 
 const OVERLAY_ID = 'cueweave-subtitle-overlay';
+const CONTENT_BUILD_MARKER = 'boundary-fallback-v1';
 const PREFETCH_WINDOW_COUNT = 3;
 
 type WindowTranslationStatus = 'working' | 'ready' | 'failed';
@@ -80,6 +81,7 @@ function updateState(patch: Partial<ContentState>): void {
 
 function reflectState(host: HTMLElement): void {
   host.dataset.cueweaveStatus = state.status;
+  host.dataset.cueweaveBuild = CONTENT_BUILD_MARKER;
   host.dataset.cueweaveCueCount = String(state.cueCount);
   host.dataset.cueweaveDisplayCueCount = String(state.displayCueCount);
   host.dataset.cueweaveAiStatus = state.aiStatus;

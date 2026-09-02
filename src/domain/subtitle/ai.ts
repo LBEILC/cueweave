@@ -42,8 +42,8 @@ const MIN_PUNCTUATION_CHUNK_CHARACTERS = 4;
 const HIDDEN_TRANSLATION_BOUNDARY = /[，。；：,.;:]+/u;
 const HAN_WHITESPACE_BOUNDARY = /\p{Script=Han}\s+\p{Script=Han}/u;
 
-export const AI_PROMPT_VERSION = 'prompt-v5';
-export const DISPLAY_SEGMENTATION_VERSION = 'display-v5';
+export const AI_PROMPT_VERSION = 'prompt-v6';
+export const DISPLAY_SEGMENTATION_VERSION = 'display-v6';
 
 export const AI_SUBTITLE_SCHEMA = {
   type: 'object',
@@ -133,8 +133,8 @@ function tokenText(tokens: readonly SourceToken[]): string {
   return tokens.map((token) => token.text).join(' ');
 }
 
-function normalizeTranslation(value: string): string {
-  const trimmed = value.trim();
+function normalizeTranslation(value: string, cleanBoundaryMarkers = false): string {
+  const trimmed = cleanBoundaryMarkers ? value.trim().replace(/\s+/gu, '') : value.trim();
   if (HAN_WHITESPACE_BOUNDARY.test(trimmed)) {
     throw new TranslationBoundaryError(
       '模型在一条中文字幕中使用空格代替了语义分段，请按对应英文词元范围返回多个 unit。',
@@ -148,7 +148,7 @@ function normalizeTranslation(value: string): string {
   const canUsePunctuationBoundary =
     punctuationParts.length > 1 &&
     punctuationParts.every((part) => Array.from(part).length >= MIN_PUNCTUATION_CHUNK_CHARACTERS);
-  if (canUsePunctuationBoundary) {
+  if (canUsePunctuationBoundary && !cleanBoundaryMarkers) {
     throw new TranslationBoundaryError(
       '模型在一个 unit 中返回了可独立分句的译文，请改用多个连续词元范围。',
     );
@@ -297,6 +297,21 @@ export function parseAiSubtitleOutput(
   content: string,
   tokens: readonly SourceToken[],
 ): DisplayCue[] {
+  return parseAiSubtitleOutputInternal(content, tokens, false);
+}
+
+export function parseAiSubtitleFallbackOutput(
+  content: string,
+  tokens: readonly SourceToken[],
+): DisplayCue[] {
+  return parseAiSubtitleOutputInternal(content, tokens, true);
+}
+
+function parseAiSubtitleOutputInternal(
+  content: string,
+  tokens: readonly SourceToken[],
+  cleanBoundaryMarkers: boolean,
+): DisplayCue[] {
   const output = parseAiSubtitleJson(content);
   const displayCues: DisplayCue[] = [];
   const boundaryIssues: AiSubtitleBoundaryIssue[] = [];
@@ -318,7 +333,7 @@ export function parseAiSubtitleOutput(
 
     let translation = '';
     try {
-      translation = normalizeTranslation(unit.translation);
+      translation = normalizeTranslation(unit.translation, cleanBoundaryMarkers);
     } catch (error) {
       if (!(error instanceof TranslationBoundaryError)) throw error;
       boundaryIssues.push({

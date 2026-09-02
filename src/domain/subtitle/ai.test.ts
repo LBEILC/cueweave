@@ -5,6 +5,7 @@ import {
   buildAiSubtitleBoundaryRepairPrompt,
   buildAiSubtitlePrompt,
   findAiSubtitleReviewIssue,
+  parseAiSubtitleFallbackOutput,
   parseAiSubtitleOutput,
 } from './ai';
 import type { SourceToken } from './types';
@@ -168,6 +169,27 @@ describe('AI subtitle output', () => {
         tokens,
       ),
     ).toThrow('使用空格代替了语义分段');
+  });
+
+  it('can clean display separators without inventing new token boundaries', () => {
+    const tokens = tokensFor('A precise model selected range.');
+    const result = parseAiSubtitleFallbackOutput(
+      JSON.stringify({
+        units: [
+          {
+            startIndex: 0,
+            endIndex: 4,
+            translation: '模型已选择范围， 这里只清理显示符号。',
+            sentenceEnd: true,
+          },
+        ],
+      }),
+      tokens,
+    );
+
+    expect(result).toHaveLength(1);
+    expect(result[0]?.translation).toBe('模型已选择范围这里只清理显示符号');
+    expect(result[0]?.sourceTokenIds).toEqual(tokens.map((token) => token.id));
   });
 
   it('repairs only the rejected unit and preserves surrounding model output', () => {

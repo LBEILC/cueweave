@@ -250,6 +250,97 @@ describe('Chat Completions provider', () => {
     expect(progress).toEqual(['translating', 'repairing-boundaries', 'repairing-boundaries']);
   });
 
+  it('keeps precise model ranges after bounded repairs only leave display separators', async () => {
+    const fallbackTokens = 'And I think a kind of cleareyed sober response where it is like hey.'
+      .split(' ')
+      .map((text, index) => ({
+        id: `fallback-${index}`,
+        cueId: 'fallback-cue',
+        startMs: index * 200,
+        endMs: (index + 1) * 200,
+        text,
+      }));
+    const responses = [
+      {
+        units: [
+          {
+            startIndex: 0,
+            endIndex: 13,
+            translation: '我认为应该清醒回应，就像这样说嘿',
+            sentenceEnd: true,
+          },
+        ],
+      },
+      {
+        units: [
+          {
+            startIndex: 0,
+            endIndex: 7,
+            translation: '我认为应该保持清醒理智',
+            sentenceEnd: false,
+          },
+          {
+            startIndex: 8,
+            endIndex: 13,
+            translation: '回应就像是 嘿',
+            sentenceEnd: true,
+          },
+        ],
+      },
+      {
+        units: [
+          {
+            startIndex: 8,
+            endIndex: 10,
+            translation: '回应就像',
+            sentenceEnd: false,
+          },
+          {
+            startIndex: 11,
+            endIndex: 13,
+            translation: '这样 说嘿',
+            sentenceEnd: true,
+          },
+        ],
+      },
+      {
+        units: [
+          { startIndex: 11, endIndex: 11, translation: '这', sentenceEnd: false },
+          { startIndex: 12, endIndex: 13, translation: '样 说嘿', sentenceEnd: true },
+        ],
+      },
+    ];
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(completion(responses[0]!))
+      .mockResolvedValueOnce(completion(responses[1]!))
+      .mockResolvedValueOnce(completion(responses[2]!))
+      .mockResolvedValueOnce(completion(responses[3]!));
+    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('browser', { permissions: { contains: vi.fn().mockResolvedValue(true) } });
+    const progress: string[] = [];
+
+    const result = await translateTokenWindow(settings, fallbackTokens, (stage) => {
+      progress.push(stage);
+    });
+
+    expect(result.map((cue) => cue.translation)).toEqual([
+      '我认为应该保持清醒理智',
+      '回应就像',
+      '这',
+      '样说嘿',
+    ]);
+    expect(result.flatMap((cue) => cue.sourceTokenIds)).toEqual(
+      fallbackTokens.map((token) => token.id),
+    );
+    expect(progress).toEqual([
+      'translating',
+      'repairing-boundaries',
+      'repairing-boundaries',
+      'repairing-boundaries',
+    ]);
+  });
+
   it('reports missing runtime permission before sending a request', async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);

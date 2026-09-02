@@ -6,6 +6,7 @@ import {
   buildAiSubtitlePrompt,
   findAiSubtitleReviewIssue,
   mergeAiSubtitleBoundaryRepair,
+  parseAiSubtitleFallbackOutput,
   parseAiSubtitleOutput,
 } from '../domain/subtitle/ai';
 import type { TranslationProgressStage } from './messages';
@@ -318,7 +319,11 @@ export async function translateTokenWindow(
       }
     }
 
-    throw invalidResponseError(lastError);
+    try {
+      return parseAiSubtitleFallbackOutput(mergedContent, tokens);
+    } catch {
+      throw invalidResponseError(lastError);
+    }
   };
 
   onProgress?.('translating');
