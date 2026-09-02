@@ -7,18 +7,21 @@
 ```mermaid
 flowchart TD
     Y[YouTube 字幕轨道] --> C[字幕获取]
-    C --> N[标准化、噪声识别与滚动去重]
-    N --> S[本地规则断句]
-    S --> W[上下文窗口与任务调度]
+    C --> T[保留 cue 与词级时间]
+    T --> N[标准化、噪声识别与滚动去重]
+    N --> F[本地降级显示字幕]
+    N --> W[连续词元窗口与任务调度]
     W --> P[OpenAI 兼容 Provider]
-    P --> V[结构校验与 cue 完整性校验]
-    V --> T[程序生成时间轴]
-    T --> R[播放器字幕渲染]
-    T --> E[SRT / WebVTT 导出]
+    P --> V[Schema 与词元覆盖校验]
+    V --> A[语义句与翻译]
+    A --> U[程序生成显示时间轴]
+    F --> R[播放器字幕渲染]
+    U --> R
+    U --> E[SRT / WebVTT 导出]
     W <--> D[(IndexedDB 缓存)]
 ```
 
-模型只决定 cue 分组、修复后的原文和翻译，不生成或修改时间戳。每个语义段的开始和结束时间由首尾 cue 在本地计算。
+模型只决定词元分组和翻译，不复述原文，也不生成或修改时间戳。原文及每条显示字幕的开始、结束时间均由覆盖词元在本地生成。
 
 ## 运行上下文
 
@@ -29,7 +32,7 @@ flowchart TD
 - 从 `chrome.storage.local` 读取 Provider 设置和 API Key；
 - 申请用户选择的 API origin 运行时权限；
 - 调用模型 API 并归一化错误；
-- 管理任务并发、超时、退避、取消和去重；
+- 管理任务优先级、并发、超时、退避和去重；
 - 协调 IndexedDB 缓存与缓存失效；
 - 在 Service Worker 被回收后从持久状态安全恢复。
 
@@ -59,9 +62,9 @@ Options 是以下设置的唯一完整入口：Provider、字幕行为、样式�
 
 ## 领域模型
 
-领域模型的唯一事实来源是 [`RawCue`、`NormalizedCue` 与 `SemanticSegment`](../src/domain/subtitle/types.ts)。管线的公开入口由 [`src/domain/subtitle/index.ts`](../src/domain/subtitle/index.ts) 导出。
+领域模型的唯一事实来源是 [`RawCue`、`TimedWord`、`SourceToken`、`SemanticSegment` 与 `DisplayCue`](../src/domain/subtitle/types.ts)。管线的公开入口由 [`src/domain/subtitle/index.ts`](../src/domain/subtitle/index.ts) 导出。
 
-`RawCue` 保存 YouTube 时间事实；`NormalizedCue` 增加清洗文本、噪声和来源 cue 映射；`SemanticSegment` 表示可渲染、翻译和导出的完整语义段。
+`RawCue` 与 `TimedWord` 保存 YouTube 时间事实；`SourceToken` 是交给模型的最小连续覆盖单位；`SemanticSegment` 表示完整语义；`DisplayCue` 表示播放器、导出和阅读速度约束下的一次屏幕显示。语义结构和显示结构不得合并为同一类型。
 
 ## 字幕管线
 
@@ -71,23 +74,23 @@ Options 是以下设置的唯一完整入口：Provider、字幕行为、样式�
 
 噪声 cue 保留时间信息并标记为 `isNoise`，默认不进入翻译请求。是否显示由用户设置决定。
 
-### 2. 本地规则断句
+### 2. 本地降级显示
 
-按强标点、停顿、说话人变化、最大持续时间、最大字符数和时间不连续切分。阈值必须集中在一个配置对象中，并由单元测试覆盖边界。
+按词级时间、强标点、停顿、说话人变化、最大持续时间、最大字符数和时间不连续生成可立即显示的原文字幕。它是 Provider 不可用时的可靠降级，不作为最终语义断句结果。阈值必须集中配置，并由真实边界样本覆盖。
 
 ### 3. AI 语义重组
 
-调度器将一段连续 cue 和有限上下文交给模型。请求包含稳定 cue ID；返回值必须符合 JSON Schema，并满足：
+调度器将一个连续词元窗口交给模型。模型返回窗口内的起止索引、翻译和句末标记；返回值必须符合 JSON Schema，并满足：
 
-- 每个输入 cue ID 恰好出现一次；
-- 顺序与原字幕一致；
-- 不出现未知、遗漏或重复 ID；
-- `sourceText` 与 `translation` 非空；
-- 分段只覆盖请求允许的 cue 范围。
+- 每个输入索引恰好被一个连续范围覆盖；
+- 范围顺序与原字幕一致；
+- 不出现越界、间断、遗漏或重复范围；
+- `translation` 非空，原文由本地词元重建；
+- 中文长度符合[产品需求](PRODUCT_SPEC.md#字幕显示)。
 
-### 4. 校验与降级
+### 4. 本地显示切分、校验与降级
 
-解析失败时先剥离常见 Markdown 代码围栏，再执行一次严格重试。第二次失败后使用本地断句结果；翻译为空或 Provider 故障时保留原文。任何失败都不能阻塞视频播放。
+中文优先在播放器可用宽度内保持单行，只有实际接近播放器边缘时才自然换行。逗号、句号、分号和冒号只作为分句信号，不进入最终中文字幕；两侧均可独立阅读时，本地按该边界拆成多条显示字幕，过短片段则合并并移除标点。顿号保留，问号和感叹号用于保留语气。没有自然边界时允许保留至 36 字，超过 36 字才按可用标点或均衡长度兜底拆分。拆分后的连续原文词元按比例分配并重新计算时间。解析失败时先剥离常见 Markdown 代码围栏；结构或覆盖校验失败时，把无效结果和具体错误交给模型执行一次严格修复。第二次失败后使用本地显示字幕；翻译为空或 Provider 故障时保留原文。任何失败都不能阻塞视频播放。
 
 ## 调度
 
@@ -100,6 +103,10 @@ Options 是以下设置的唯一完整入口：Provider、字幕行为、样式�
 
 拖动进度条后，调度器提升新位置附近任务，并取消或降低旧位置任务。任务身份由视频、字幕轨、上下文窗口和翻译配置共同确定，防止重复请求。
 
+当前窗口完成后串行预取前方三个词元窗口，通常覆盖约 90 秒。播放位置变化会提升新窗口为最高优先级，并使旧焦点在完成当前请求后停止继续预取，从而减少跨窗时的原文降级，同时避免在用户未继续观看时翻译整段视频。
+
+Background 使用并发上限为 2 的稳定优先队列。当前位置任务先于等待中的预取任务执行，相同缓存身份的并发请求共享同一个 Promise。Content Script 通过焦点版本阻止 seek 前的任务继续扩展预取链；进行中的网络请求暂不强制中止，返回结果仍受视频会话和焦点版本约束。
+
 ## 缓存
 
 缓存键由以下稳定维度组成：
@@ -109,16 +116,24 @@ Options 是以下设置的唯一完整入口：Provider、字幕行为、样式�
 - 原始语言和目标语言；
 - Provider Base URL 的非敏感标识；
 - 模型名称；
+- 请求协议；
 - 提示词版本；
 - 断句算法版本；
 - 输入字幕内容摘要。
 
 API Key 不进入缓存键。设置和小型索引放在 `chrome.storage.local`；整段字幕和翻译结果放在 IndexedDB。缓存实现必须有容量上限、LRU 淘汰、当前视频清除和全部清除操作。
 
+当前实现把验证通过的窗口翻译保存在 `cueweave-cache` IndexedDB 中，默认最多 1,200 个窗口或 24 MiB，以先达到的限制为准。读取会更新最后访问时间；写入后按 LRU 淘汰。IndexedDB 不可用或写入失败时直接继续实时翻译，不影响播放。
+
+## OpenAI 兼容协议
+
+Provider 设置可固定为 Chat Completions、Responses，或使用自动检测。自动模式先请求 Chat Completions，只在端点不存在或响应无法解析时回退 Responses；认证、限流、超时和普通网络错误不会触发跨协议重复请求。CLIProxyAPI 等本机代理可直接固定为 Responses。第三方代理的账户认证由代理自行管理，CueWeave 只保存它对本机客户端签发的访问 Key。详细边界见 [CLIProxyAPI 连接说明](CLIPROXYAPI.md)。
+
 ## 权限与安全边界
 
 - 静态 host permission 只覆盖 YouTube 所需页面。
 - 用户自定义模型域名使用 optional host permissions，并在保存或测试连接时申请。
+- `chrome.storage.local` 使用 `TRUSTED_CONTEXTS` 访问级别，content script 只能通过窄消息读取非敏感状态。
 - 主世界脚本不接触任何密钥或用户 Provider 设置。
 - 日志使用错误类别和请求 ID，不记录 Authorization header、完整响应体或字幕正文。
 - Content Security Policy 不允许远程脚本和动态代码执行。

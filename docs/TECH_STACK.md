@@ -18,7 +18,7 @@ CueWeave 采用 WXT + TypeScript 构建 Manifest V3 扩展；Popup 与设置页�
 | 浏览器 API     | WebExtension / Chrome Extension APIs | 存储、运行时权限、消息传递、下载和扩展生命周期                                        |
 | 小型持久化     | `chrome.storage.local`               | 用户设置、Provider 配置、非敏感索引和小型状态                                         |
 | 大型持久化     | IndexedDB（通过轻量封装）            | 完整字幕、语义分段、翻译结果和 LRU 元数据                                             |
-| Schema 校验    | JSON Schema + Ajv                    | 校验模型结构化输出，并生成可复现的失败信息                                            |
+| Schema 校验    | JSON Schema + 静态 TypeScript 校验   | 约束模型响应并执行兼容 Manifest V3 CSP 的结构与完整性检查                             |
 | 单元与集成测试 | Vitest                               | 字幕管线、Provider、缓存键、导出与错误降级                                            |
 | 浏览器端测试   | Playwright                           | 生成后的真实扩展、YouTube 页面行为和设置流程                                          |
 | 静态质量       | ESLint + Prettier + TypeScript       | 代码规则、格式和类型检查                                                              |
@@ -65,6 +65,7 @@ Node 运行时的有效版本以仓库根目录的版本文件和 `package.json#
 - Base URL、模型名、超时和重试策略均由设置提供。
 - 自定义远程域名必须通过运行时权限申请，不预先请求所有网站权限。
 - `localhost` Provider 与远程 Provider 使用同一接口和错误分类。
+- Chat Completions、Responses 和自动回退由同一 Provider 契约实现；本机代理可以固定使用 Responses。
 - 测试使用本地确定性模拟服务，不需要真实 API Key。
 
 ## 暂不采用

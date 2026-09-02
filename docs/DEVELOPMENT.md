@@ -44,6 +44,8 @@ npm test
 
 这个流程只加载本地构建，不需要 API Key。字幕读取失败时，先确认视频本身存在字幕轨，再刷新视频页面并查看 Popup 中的具体状态。
 
+如需连接用户自行运行的本机 CLIProxyAPI，参阅 [CLIProxyAPI 连接说明](CLIPROXYAPI.md)。开发和自动化测试不依赖该第三方服务，也不读取其 OAuth 文件。
+
 ## 打包
 
 ```bash
@@ -54,8 +56,10 @@ npm run zip
 
 ## 字幕管线入口
 
-- [`processSubtitleCues`](../src/domain/subtitle/pipeline.ts)：从原始 cue 运行完整本地管线。
 - [`normalizeCue`](../src/domain/subtitle/normalize.ts)：文本标准化、说话人和噪声识别。
 - [`deduplicateRollingCues`](../src/domain/subtitle/dedupe.ts)：滚动字幕增量提取与来源映射。
-- [`segmentCues`](../src/domain/subtitle/segment.ts)：标点、停顿、说话人和限制阈值断句。
-- [`parseJson3Captions`](../src/platform/youtube/captions.ts)：YouTube JSON3 到领域 cue 的适配边界。
+- [`buildSourceTokens`](../src/domain/subtitle/tokens.ts)：从清洗 cue 构建带时间的连续词元。
+- [`createLocalDisplayCues`](../src/domain/subtitle/tokens.ts)：生成不依赖模型的原文降级字幕。
+- [`createTokenWindows`](../src/domain/subtitle/tokens.ts)：为模型构建有界连续上下文。
+- [`parseAiSubtitleOutput`](../src/domain/subtitle/ai.ts)：校验模型结构、词元覆盖、原文完整性和中文长度。
+- [`parseJson3Captions`](../src/platform/youtube/captions.ts)：保留 YouTube JSON3 cue 与词级时间的适配边界。

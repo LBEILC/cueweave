@@ -2,6 +2,7 @@ import type { RawCue } from '../../domain/subtitle';
 import type { CaptionTrack } from './types';
 
 interface Json3Segment {
+  tOffsetMs?: number;
   utf8?: string;
 }
 
@@ -39,6 +40,7 @@ interface ParsedCaptionEvent {
   startMs: number;
   durationMs: number;
   text: string;
+  segments: Json3Segment[];
 }
 
 const PLAYBACK_CONTEXT_PARAMS = [
@@ -63,6 +65,7 @@ function parseCaptionEvents(payload: Json3CaptionPayload): ParsedCaptionEvent[] 
       startMs: event.tStartMs ?? 0,
       durationMs: event.dDurationMs ?? 0,
       text: (event.segs ?? []).map((segment) => segment.utf8 ?? '').join(''),
+      segments: event.segs ?? [],
     }))
     .filter((event) => event.text.trim().length > 0);
 }
@@ -74,12 +77,33 @@ export function parseJson3Captions(payload: Json3CaptionPayload): RawCue[] {
     const next = events[index + 1];
     const fallbackEndMs = next?.startMs ?? event.startMs + 2_000;
     const endMs = event.durationMs > 0 ? event.startMs + event.durationMs : fallbackEndMs;
+    const finalWordEndMs = next ? Math.min(endMs, next.startMs) : endMs;
+
+    const nonEmptySegments = event.segments.filter(
+      (segment) => (segment.utf8 ?? '').trim().length > 0,
+    );
+    const words = nonEmptySegments.map((segment, wordIndex) => {
+      const nextSegment = nonEmptySegments[wordIndex + 1];
+      const startOffsetMs = segment.tOffsetMs ?? 0;
+      const nextOffsetMs = nextSegment?.tOffsetMs;
+      const wordStartMs = event.startMs + startOffsetMs;
+      const wordEndMs =
+        typeof nextOffsetMs === 'number' ? event.startMs + nextOffsetMs : finalWordEndMs;
+
+      return {
+        id: `yt:${index}:${event.startMs}:word:${wordIndex}`,
+        startMs: wordStartMs,
+        endMs: Math.max(wordStartMs + 1, wordEndMs),
+        text: segment.utf8?.trim() ?? '',
+      };
+    });
 
     return {
       id: `yt:${index}:${event.startMs}`,
       startMs: event.startMs,
       endMs: Math.max(event.startMs + 1, endMs),
       text: event.text,
+      ...(words.length > 0 ? { words } : {}),
     };
   });
 }

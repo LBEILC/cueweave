@@ -1,8 +1,16 @@
+export interface TimedWord {
+  id: string;
+  startMs: number;
+  endMs: number;
+  text: string;
+}
+
 export interface RawCue {
   id: string;
   startMs: number;
   endMs: number;
   text: string;
+  words?: TimedWord[];
 }
 
 export interface NormalizedCue extends RawCue {
@@ -14,6 +22,17 @@ export interface NormalizedCue extends RawCue {
 
 export type SegmentStatus = 'pending' | 'translated' | 'fallback' | 'failed';
 
+export interface SourceToken extends TimedWord {
+  cueId: string;
+}
+
+export interface TokenWindow {
+  id: string;
+  startMs: number;
+  endMs: number;
+  tokens: SourceToken[];
+}
+
 export interface SemanticSegment {
   id: string;
   sourceCueIds: string[];
@@ -21,6 +40,17 @@ export interface SemanticSegment {
   endMs: number;
   sourceText: string;
   translation: string;
+  status: SegmentStatus;
+}
+
+export interface DisplayCue {
+  id: string;
+  sourceTokenIds: string[];
+  startMs: number;
+  endMs: number;
+  sourceText: string;
+  translation: string;
+  sentenceEnd: boolean;
   status: SegmentStatus;
 }
 

@@ -1,6 +1,7 @@
 import {
   CheckCircleIcon,
   CircleNotchIcon,
+  GearSixIcon,
   PowerIcon,
   ShieldCheckIcon,
   SubtitlesIcon,
@@ -9,7 +10,11 @@ import {
   type Icon,
 } from '@phosphor-icons/react';
 import { useEffect, useMemo, useState } from 'react';
-import { GET_CONTENT_STATE_MESSAGE, type ContentState } from '../../src/platform/youtube/types';
+import {
+  GET_CONTENT_STATE_MESSAGE,
+  SET_CONTENT_ENABLED_MESSAGE,
+  type ContentState,
+} from '../../src/platform/youtube/types';
 
 const ENABLED_KEY = 'cueweave.enabled';
 
@@ -77,11 +82,30 @@ function statusPresentation(view: ViewState): StatusPresentation {
         detail: view.content.message ?? '正在读取字幕轨。',
       };
     case 'ready':
+      if (view.content.aiStatus === 'working') {
+        return {
+          Icon: CircleNotchIcon,
+          tone: 'working',
+          title: '原文字幕已就绪',
+          detail: view.content.aiMessage ?? '正在生成当前位置的双语字幕。',
+        };
+      }
+      if (view.content.aiStatus === 'ready') {
+        return {
+          Icon: CheckCircleIcon,
+          tone: 'success',
+          title: '双语字幕已就绪',
+          detail: view.content.aiMessage ?? '当前位置已完成语义断句和翻译。',
+        };
+      }
       return {
         Icon: CheckCircleIcon,
         tone: 'success',
         title: '原文字幕已就绪',
-        detail: view.content.message ?? '字幕会随播放位置同步显示。',
+        detail:
+          view.content.aiStatus === 'unconfigured'
+            ? '配置模型后可生成语义断句和中文字幕。'
+            : (view.content.message ?? '字幕会随播放位置同步显示。'),
       };
     case 'no-captions':
       return {
@@ -160,6 +184,16 @@ export function App() {
       current.content ? { ...current, content: { ...current.content, enabled: next } } : current,
     );
     await browser.storage.local.set({ [ENABLED_KEY]: next });
+    if (view.tabId !== undefined) {
+      try {
+        await browser.tabs.sendMessage(view.tabId, {
+          type: SET_CONTENT_ENABLED_MESSAGE,
+          enabled: next,
+        });
+      } catch {
+        // The saved setting applies after the content script is available again.
+      }
+    }
   };
 
   return (
@@ -172,7 +206,13 @@ export function App() {
           <p className="eyebrow">CueWeave</p>
           <h1>句织</h1>
         </div>
-        <span className="mode-chip">原文模式</span>
+        <span className="mode-chip">
+          {view.content?.displayMode === 'translation'
+            ? '仅中文'
+            : view.content?.aiStatus === 'ready'
+              ? '双语模式'
+              : '原文降级'}
+        </span>
       </header>
 
       <section className={`status-block status-${presentation.tone}`} aria-live="polite">
@@ -214,8 +254,8 @@ export function App() {
             <dd>{view.content.cueCount}</dd>
           </div>
           <div>
-            <dt>完整语义段</dt>
-            <dd>{view.content.segmentCount}</dd>
+            <dt>显示字幕</dt>
+            <dd>{view.content.displayCueCount}</dd>
           </div>
           <div>
             <dt>字幕语言</dt>
@@ -225,8 +265,18 @@ export function App() {
       )}
 
       <footer>
-        <ShieldCheckIcon size={16} weight="regular" aria-hidden="true" />
-        <span>字幕处理在本机完成 · 界面使用 MiSans</span>
+        <span className="privacy-summary">
+          <ShieldCheckIcon size={16} weight="regular" aria-hidden="true" />
+          <span>本地校验 · MiSans</span>
+        </span>
+        <button
+          className="settings-link"
+          type="button"
+          onClick={() => void browser.tabs.create({ url: browser.runtime.getURL('/options.html') })}
+        >
+          <GearSixIcon size={16} aria-hidden="true" />
+          <span>模型设置</span>
+        </button>
       </footer>
     </main>
   );

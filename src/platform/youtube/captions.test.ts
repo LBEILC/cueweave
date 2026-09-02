@@ -21,19 +21,51 @@ describe('parseJson3Captions', () => {
   it('maps JSON3 events to stable raw cues', () => {
     const cues = parseJson3Captions({
       events: [
-        { tStartMs: 100, dDurationMs: 400, segs: [{ utf8: 'Hello ' }, { utf8: 'world' }] },
+        {
+          tStartMs: 100,
+          dDurationMs: 400,
+          segs: [{ utf8: 'Hello ' }, { utf8: 'world', tOffsetMs: 180 }],
+        },
         { tStartMs: 500, segs: [{ utf8: 'Again' }] },
       ],
     });
 
     expect(cues).toEqual([
-      { id: 'yt:0:100', startMs: 100, endMs: 500, text: 'Hello world' },
-      { id: 'yt:1:500', startMs: 500, endMs: 2_500, text: 'Again' },
+      {
+        id: 'yt:0:100',
+        startMs: 100,
+        endMs: 500,
+        text: 'Hello world',
+        words: [
+          { id: 'yt:0:100:word:0', startMs: 100, endMs: 280, text: 'Hello' },
+          { id: 'yt:0:100:word:1', startMs: 280, endMs: 500, text: 'world' },
+        ],
+      },
+      {
+        id: 'yt:1:500',
+        startMs: 500,
+        endMs: 2_500,
+        text: 'Again',
+        words: [{ id: 'yt:1:500:word:0', startMs: 500, endMs: 2_500, text: 'Again' }],
+      },
     ]);
   });
 
   it('ignores metadata events without caption text', () => {
     expect(parseJson3Captions({ events: [{ tStartMs: 0 }] })).toEqual([]);
+  });
+
+  it('caps the final word at the next text event when ASR event durations overlap', () => {
+    const cues = parseJson3Captions({
+      events: [
+        { tStartMs: 0, dDurationMs: 4_000, segs: [{ utf8: 'First' }] },
+        { tStartMs: 2_000, dDurationMs: 2_000, segs: [{ utf8: 'Second' }] },
+      ],
+    });
+
+    expect(cues[0]?.endMs).toBe(4_000);
+    expect(cues[0]?.words?.[0]?.endMs).toBe(2_000);
+    expect(cues[1]?.words?.[0]?.startMs).toBe(2_000);
   });
 
   it('requests JSON3 and parses a successful response body', async () => {
