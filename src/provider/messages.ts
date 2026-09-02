@@ -18,6 +18,8 @@ export interface TranslationContext {
   sessionId: string;
   videoTitle?: string;
   channelName?: string;
+  videoDescription?: string;
+  transcriptEvidence?: string[];
   correctionEnabled: boolean;
 }
 
@@ -136,6 +138,13 @@ export function isTranslateWindowMessage(value: unknown): value is TranslateWind
     (!('channelName' in value.context) ||
       value.context.channelName === undefined ||
       typeof value.context.channelName === 'string') &&
+    (!('videoDescription' in value.context) ||
+      value.context.videoDescription === undefined ||
+      typeof value.context.videoDescription === 'string') &&
+    (!('transcriptEvidence' in value.context) ||
+      value.context.transcriptEvidence === undefined ||
+      (Array.isArray(value.context.transcriptEvidence) &&
+        value.context.transcriptEvidence.every((term) => typeof term === 'string'))) &&
     (!('previousCues' in value) ||
       value.previousCues === undefined ||
       (Array.isArray(value.previousCues) &&

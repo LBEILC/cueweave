@@ -2,6 +2,7 @@ import {
   buildSourceTokens,
   createLocalDisplayCues,
   createTokenWindows,
+  extractTranscriptEvidenceTerms,
   type DisplayCue,
   type RawCue,
   type SourceToken,
@@ -43,7 +44,7 @@ import {
 } from '../../src/settings/subtitle';
 
 const OVERLAY_ID = 'cueweave-subtitle-overlay';
-const CONTENT_BUILD_MARKER = 'transcript-intelligence-v1';
+const CONTENT_BUILD_MARKER = 'proper-noun-grounding-v1';
 const PREFETCH_WINDOW_COUNT = 3;
 
 type WindowTranslationStatus = 'working' | 'ready' | 'failed';
@@ -369,16 +370,29 @@ function formatTime(timeMs: number): string {
   return `${minutes}:${seconds}`;
 }
 
-function currentVideoContext(): { videoTitle?: string; channelName?: string } {
+function currentVideoContext(): {
+  videoTitle?: string;
+  channelName?: string;
+  videoDescription?: string;
+  transcriptEvidence?: string[];
+} {
   const rawTitle =
     document.querySelector<HTMLElement>('ytd-watch-metadata h1')?.innerText.trim() ||
     document.title.replace(/\s+-\s+YouTube$/u, '').trim();
   const channelName = document
     .querySelector<HTMLElement>('ytd-watch-metadata ytd-channel-name a')
     ?.innerText.trim();
+  const videoDescription =
+    document.querySelector<HTMLMetaElement>('meta[name="description"]')?.content.trim() ||
+    document
+      .querySelector<HTMLElement>('ytd-watch-metadata #description-inline-expander')
+      ?.innerText.trim();
+  const transcriptEvidence = extractTranscriptEvidenceTerms(sourceTokens);
   return {
     ...(rawTitle ? { videoTitle: rawTitle.slice(0, 200) } : {}),
     ...(channelName ? { channelName: channelName.slice(0, 120) } : {}),
+    ...(videoDescription ? { videoDescription: videoDescription.slice(0, 1_200) } : {}),
+    ...(transcriptEvidence.length > 0 ? { transcriptEvidence } : {}),
   };
 }
 

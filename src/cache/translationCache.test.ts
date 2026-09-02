@@ -51,10 +51,15 @@ describe('translation cache key', () => {
       ...identity,
       protocol: 'responses',
     });
+    const changedDescription = await createTranslationCacheKey({
+      ...identity,
+      videoDescription: 'A newly available model family.',
+    });
 
     expect(second).toBe(first);
     expect(changed).not.toBe(first);
     expect(changedProtocol).not.toBe(first);
+    expect(changedDescription).not.toBe(first);
     expect(first).toMatch(/^translation-v1:[a-f0-9]{64}$/u);
   });
 });

@@ -21,6 +21,8 @@ export interface TranslationCacheIdentity {
   tokens: readonly SourceToken[];
   videoTitle?: string;
   channelName?: string;
+  videoDescription?: string;
+  transcriptEvidence?: readonly string[];
   correctionEnabled?: boolean;
 }
 
@@ -153,6 +155,8 @@ function canonicalCacheInput(identity: TranslationCacheIdentity): string {
     segmentationVersion: identity.segmentationVersion,
     videoTitle: identity.videoTitle ?? '',
     channelName: identity.channelName ?? '',
+    videoDescription: identity.videoDescription ?? '',
+    transcriptEvidence: identity.transcriptEvidence ?? [],
     correctionEnabled: identity.correctionEnabled !== false,
     tokens: identity.tokens.map((token) => ({
       id: token.id,

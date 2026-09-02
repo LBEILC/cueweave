@@ -360,6 +360,8 @@ describe('AI subtitle output', () => {
         terminology: [{ source: 'ChatGPT', translation: 'ChatGPT' }],
       }),
       tokens,
+      true,
+      { videoTitle: 'How teams use ChatGPT' },
     );
 
     expect(result[0]?.originalText).toBe('We use Chat GTT every day.');
@@ -422,11 +424,167 @@ describe('AI subtitle output', () => {
       }),
       tokens,
       false,
+      { videoTitle: 'How teams use ChatGPT' },
     );
 
     expect(result[0]?.originalText).toBe('We use Chat GTT every day.');
     expect(result[0]?.sourceText).toBe('We use Chat GTT every day.');
     expect(result[0]?.corrections).toEqual([]);
+  });
+
+  it('rejects a familiar model name invented for an Astra transcription variant', () => {
+    const tokens = tokensFor(
+      'This does not impact Astra. Well Astro will be a model family with versions of Astra.',
+    );
+    const astroIndex = tokens.findIndex((token) => token.text === 'Astro');
+
+    expect(() =>
+      parseAiSubtitleOutput(
+        JSON.stringify({
+          units: [
+            {
+              startIndex: 0,
+              endIndex: tokens.length - 1,
+              translation: '这不会影响Astra GPT-4o将成为一个模型家族',
+              sentenceEnd: true,
+            },
+          ],
+          corrections: [
+            {
+              startIndex: astroIndex,
+              endIndex: astroIndex,
+              correctedText: 'GPT-4o',
+              confidence: 0.99,
+              category: 'proper-noun',
+            },
+          ],
+          terminology: [{ source: 'GPT-4o', translation: 'GPT-4o' }],
+        }),
+        tokens,
+      ),
+    ).toThrow('GPT-4o');
+  });
+
+  it('uses repeated transcript evidence to repair a new proper noun without metadata', () => {
+    const tokens = tokensFor(
+      'This does not impact Astra. Well Astro will be a model family with versions of Astra.',
+    );
+    const astroIndex = tokens.findIndex((token) => token.text === 'Astro');
+    const result = parseAiSubtitleOutput(
+      JSON.stringify({
+        units: [
+          {
+            startIndex: 0,
+            endIndex: tokens.length - 1,
+            translation: '这不会影响Astra 它将成为拥有多个版本的模型家族',
+            sentenceEnd: true,
+          },
+        ],
+        corrections: [
+          {
+            startIndex: astroIndex,
+            endIndex: astroIndex,
+            correctedText: 'Astra',
+            confidence: 0.96,
+            category: 'proper-noun',
+          },
+        ],
+        terminology: [{ source: 'Astra', translation: 'Astra' }],
+      }),
+      tokens,
+    );
+
+    expect(result[0]?.sourceText).toContain('Well Astra will');
+    expect(result[0]?.corrections?.[0]).toMatchObject({
+      originalText: 'Astro',
+      correctedText: 'Astra',
+      applied: true,
+    });
+    expect(result[0]?.terminology).toEqual([{ source: 'Astra', translation: 'Astra' }]);
+  });
+
+  it('preserves a one-off unknown name when no supporting evidence exists', () => {
+    const tokens = tokensFor('The new model is Astro.');
+    const result = parseAiSubtitleOutput(
+      JSON.stringify({
+        units: [
+          {
+            startIndex: 0,
+            endIndex: tokens.length - 1,
+            translation: '新模型名为Astro',
+            sentenceEnd: true,
+          },
+        ],
+        corrections: [
+          {
+            startIndex: 4,
+            endIndex: 4,
+            correctedText: 'Astra',
+            confidence: 0.99,
+            category: 'proper-noun',
+          },
+        ],
+        terminology: [{ source: 'Astra', translation: 'Astra' }],
+      }),
+      tokens,
+    );
+
+    expect(result[0]?.sourceText).toBe('The new model is Astro.');
+    expect(result[0]?.corrections?.[0]?.applied).toBe(false);
+    expect(result[0]?.terminology).toBeUndefined();
+  });
+
+  it('uses repeated full-video terms when the current window has only the ASR variant', () => {
+    const tokens = tokensFor('Well Astro will be a model family.');
+    const result = parseAiSubtitleOutput(
+      JSON.stringify({
+        units: [
+          {
+            startIndex: 0,
+            endIndex: tokens.length - 1,
+            translation: 'Astra将成为一个模型家族',
+            sentenceEnd: true,
+          },
+        ],
+        corrections: [
+          {
+            startIndex: 1,
+            endIndex: 1,
+            correctedText: 'Astra',
+            confidence: 0.96,
+            category: 'proper-noun',
+          },
+        ],
+        terminology: [{ source: 'Astra', translation: 'Astra' }],
+      }),
+      tokens,
+      true,
+      { transcriptEvidence: ['Astra'] },
+    );
+
+    expect(result[0]?.sourceText).toBe('Well Astra will be a model family.');
+    expect(result[0]?.corrections?.[0]?.applied).toBe(true);
+  });
+
+  it('does not remember an unsupported Latin name as a term translation', () => {
+    const tokens = tokensFor('Astra is a model family.');
+    const result = parseAiSubtitleOutput(
+      JSON.stringify({
+        units: [
+          {
+            startIndex: 0,
+            endIndex: tokens.length - 1,
+            translation: 'Astra是一个模型家族',
+            sentenceEnd: true,
+          },
+        ],
+        corrections: [],
+        terminology: [{ source: 'Astra', translation: 'GPT-4o' }],
+      }),
+      tokens,
+    );
+
+    expect(result[0]?.terminology).toBeUndefined();
   });
 
   it('rejects overlapping correction ranges', () => {
@@ -488,6 +646,8 @@ describe('AI subtitle output', () => {
   it('includes display constraints and indexed tokens in the prompt', () => {
     const prompt = buildAiSubtitlePrompt(tokensFor('Hello world.'), {
       videoTitle: 'A ChatGPT interview',
+      videoDescription: 'A discussion of the Astra model family.',
+      transcriptEvidence: ['Astra'],
       terminology: [{ source: 'ChatGPT', translation: 'ChatGPT' }],
     });
     expect(prompt).toContain('不得出现在 translation 中');
@@ -496,6 +656,9 @@ describe('AI subtitle output', () => {
     expect(prompt).toContain('不要求每个 unit 自己构成完整句');
     expect(prompt).toContain('不得拆开 AI 等英文词');
     expect(prompt).toContain('A ChatGPT interview');
+    expect(prompt).toContain('A discussion of the Astra model family.');
+    expect(prompt).toContain('"transcriptEvidence":["Astra"]');
+    expect(prompt).toContain('禁止替换成 GPT-4o');
     expect(prompt).toContain('既有术语');
     expect(prompt).not.toContain('36');
     expect(prompt).toContain('{"index":0,"text":"Hello"}');

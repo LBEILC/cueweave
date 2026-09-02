@@ -89,6 +89,9 @@ function validTranslationContext(message: TranslateWindowMessage): boolean {
     message.context.sessionId.length <= 128 &&
     (message.context.videoTitle?.length ?? 0) <= 200 &&
     (message.context.channelName?.length ?? 0) <= 120 &&
+    (message.context.videoDescription?.length ?? 0) <= 1_200 &&
+    (message.context.transcriptEvidence?.length ?? 0) <= 80 &&
+    (message.context.transcriptEvidence ?? []).every((term) => term.length <= 96) &&
     (message.previousCues?.length ?? 0) <= 6 &&
     (message.previousCues ?? []).every(
       (cue) => cue.sourceText.length <= 500 && cue.translation.length <= 500,
@@ -135,6 +138,12 @@ async function translateWindowMessage(
       tokens: message.tokens,
       ...(message.context.videoTitle ? { videoTitle: message.context.videoTitle } : {}),
       ...(message.context.channelName ? { channelName: message.context.channelName } : {}),
+      ...(message.context.videoDescription
+        ? { videoDescription: message.context.videoDescription }
+        : {}),
+      ...(message.context.transcriptEvidence
+        ? { transcriptEvidence: message.context.transcriptEvidence }
+        : {}),
       correctionEnabled: message.context.correctionEnabled,
     });
 
@@ -172,6 +181,12 @@ async function translateWindowMessage(
         {
           ...(message.context.videoTitle ? { videoTitle: message.context.videoTitle } : {}),
           ...(message.context.channelName ? { channelName: message.context.channelName } : {}),
+          ...(message.context.videoDescription
+            ? { videoDescription: message.context.videoDescription }
+            : {}),
+          ...(message.context.transcriptEvidence
+            ? { transcriptEvidence: message.context.transcriptEvidence }
+            : {}),
           correctionEnabled: message.context.correctionEnabled,
           terminology,
           ...(message.previousCues ? { previousCues: message.previousCues } : {}),

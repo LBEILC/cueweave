@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import fixture from '../../test/fixtures/youtube/VeizK1M7V7E.en.354560-385000.json';
+import astraFixture from '../../test/fixtures/youtube/VeizK1M7V7E.en.785000-805000.json';
 import { buildSourceTokens, createTokenWindows } from '../domain/subtitle';
 import { parseJson3Captions } from '../platform/youtube/captions';
 import { translateTokenWindow } from './chatCompletions';
@@ -8,6 +9,10 @@ const apiKey = import.meta.env.CUEWEAVE_LLM_TOKEN;
 const tokens = buildSourceTokens(parseJson3Captions(fixture));
 const window = createTokenWindows(tokens).find(
   (candidate) => candidate.startMs <= 358_160 && candidate.endMs >= 360_160,
+);
+const astraTokens = buildSourceTokens(parseJson3Captions(astraFixture));
+const astraWindow = createTokenWindows(astraTokens).find((candidate) =>
+  candidate.tokens.some((token) => token.text.replace(/[^\p{L}\p{N}]/gu, '') === 'Astro'),
 );
 
 afterEach(() => {
@@ -74,6 +79,37 @@ describe('real subtitle model integration', () => {
           applied: true,
         }),
       ]);
+    },
+    120_000,
+  );
+
+  it.runIf(Boolean(apiKey))(
+    'keeps Astra grounded by the real transcript instead of inventing GPT-4o',
+    async () => {
+      vi.stubGlobal('browser', { permissions: { contains: vi.fn().mockResolvedValue(true) } });
+      expect(astraWindow).toBeDefined();
+
+      const cues = await translateTokenWindow(
+        {
+          baseUrl: 'https://api.gpt.ge/v1',
+          apiKey,
+          model: 'gemini-3.1-flash-lite',
+          protocol: 'chat-completions',
+        },
+        astraWindow!.tokens,
+        undefined,
+        undefined,
+        { transcriptEvidence: ['Astra'] },
+      );
+      const source = cues.map((cue) => cue.sourceText).join(' ');
+      const translation = cues.map((cue) => cue.translation).join(' ');
+
+      expect(source).toContain('Astra');
+      expect(source).not.toContain('GPT-4o');
+      expect(translation).not.toContain('GPT-4o');
+      expect(cues.flatMap((cue) => cue.terminology ?? []).map((term) => term.source)).not.toContain(
+        'GPT-4o',
+      );
     },
     120_000,
   );

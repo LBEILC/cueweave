@@ -1,6 +1,6 @@
 import type { TranslationTerm } from '../domain/subtitle';
 
-const VIDEO_GLOSSARIES_KEY = 'cueweave.video-glossaries';
+const VIDEO_GLOSSARIES_KEY = 'cueweave.video-glossaries-v2';
 const MAX_VIDEOS = 80;
 const MAX_TERMS_PER_VIDEO = 80;
 

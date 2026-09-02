@@ -334,7 +334,7 @@ export async function translateTokenWindow(
           boundaryError,
         );
         mergedContent = candidateContent;
-        return parseAiSubtitleOutput(candidateContent, tokens, correctionEnabled);
+        return parseAiSubtitleOutput(candidateContent, tokens, correctionEnabled, context);
       } catch (error) {
         lastError = error;
         if (error instanceof AiSubtitleBoundaryError) boundaryError = error;
@@ -342,7 +342,7 @@ export async function translateTokenWindow(
     }
 
     try {
-      return parseAiSubtitleFallbackOutput(mergedContent, tokens, correctionEnabled);
+      return parseAiSubtitleFallbackOutput(mergedContent, tokens, correctionEnabled, context);
     } catch {
       throw invalidResponseError(lastError);
     }
@@ -353,7 +353,7 @@ export async function translateTokenWindow(
   let lastError: unknown;
 
   try {
-    const cues = parseAiSubtitleOutput(content, tokens, correctionEnabled);
+    const cues = parseAiSubtitleOutput(content, tokens, correctionEnabled, context);
     const reviewIssue = findAiSubtitleReviewIssue(cues);
     if (reviewIssue) throw new Error(reviewIssue);
     return cues;
@@ -380,7 +380,7 @@ export async function translateTokenWindow(
   );
 
   try {
-    return parseAiSubtitleOutput(content, tokens, correctionEnabled);
+    return parseAiSubtitleOutput(content, tokens, correctionEnabled, context);
   } catch (error) {
     if (error instanceof AiSubtitleBoundaryError) {
       return repairBoundaryUnits(content, error);
