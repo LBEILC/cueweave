@@ -197,6 +197,7 @@ export function buildAiSubtitleBoundaryRepairPrompt(
     startIndex: issue.startIndex,
     endIndex: issue.endIndex,
     currentTranslation: issue.translation,
+    problem: issue.reason,
     sentenceEnd: issue.sentenceEnd,
     contextBefore: tokens
       .slice(Math.max(0, issue.startIndex - 8), issue.startIndex)
@@ -218,6 +219,7 @@ export function buildAiSubtitleBoundaryRepairPrompt(
     '返回的 unit 只能覆盖各自 targetTokens 的全局索引范围；每个范围必须连续、完整覆盖且仅覆盖一次。',
     'contextBefore 和 contextAfter 只用于理解上下文，不得覆盖或翻译。',
     'translation 不得使用中文逗号、句号、分号、冒号、空格或换行模拟分句。',
+    '输出前逐条检查 translation：任何空格都不合格；如果仍想使用空格或分句标点，必须继续在对应英文词元边界拆分。',
     '根据语义判断每个 replacement 的 sentenceEnd；中间 replacement 只有在完整句确实结束时才为 true，最后一个必须继承原 unit 的值。',
     '不按字符数机械切分；根据从句、转折、让步、递进、补充说明和自然呼吸点确定准确的英文词元边界。',
     '只返回 JSON，不解释，不使用 Markdown。',
@@ -233,6 +235,17 @@ export function applyAiSubtitleBoundaryRepair(
   tokens: readonly SourceToken[],
   error: AiSubtitleBoundaryError,
 ): DisplayCue[] {
+  return parseAiSubtitleOutput(
+    mergeAiSubtitleBoundaryRepair(originalContent, repairContent, error),
+    tokens,
+  );
+}
+
+export function mergeAiSubtitleBoundaryRepair(
+  originalContent: string,
+  repairContent: string,
+  error: AiSubtitleBoundaryError,
+): string {
   const original = parseAiSubtitleJson(originalContent);
   const repair = parseAiSubtitleJson(repairContent);
   const replacements = new Map<number, AiSubtitleUnit[]>();
@@ -277,7 +290,7 @@ export function applyAiSubtitleBoundaryRepair(
   }
 
   const merged = original.units.flatMap((unit, index) => replacements.get(index) ?? [unit]);
-  return parseAiSubtitleOutput(JSON.stringify({ units: merged }), tokens);
+  return JSON.stringify({ units: merged });
 }
 
 export function parseAiSubtitleOutput(

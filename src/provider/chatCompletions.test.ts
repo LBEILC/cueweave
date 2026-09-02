@@ -168,6 +168,88 @@ describe('Chat Completions provider', () => {
     expect(progress).toEqual(['translating', 'repairing-boundaries']);
   });
 
+  it('keeps refining only the smaller unit when the first boundary repair is still invalid', async () => {
+    const recursiveTokens = 'And I think a kind of cleareyed sober response where it is like hey.'
+      .split(' ')
+      .map((text, index) => ({
+        id: `recursive-${index}`,
+        cueId: 'recursive-cue',
+        startMs: index * 200,
+        endMs: (index + 1) * 200,
+        text,
+      }));
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        completion({
+          units: [
+            {
+              startIndex: 0,
+              endIndex: 13,
+              translation: '我认为一种清醒而理智的回应是，就像这样说嘿',
+              sentenceEnd: true,
+            },
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(
+        completion({
+          units: [
+            {
+              startIndex: 0,
+              endIndex: 7,
+              translation: '我认为应该保持清醒理智',
+              sentenceEnd: false,
+            },
+            {
+              startIndex: 8,
+              endIndex: 13,
+              translation: '回应就像是 嘿',
+              sentenceEnd: true,
+            },
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(
+        completion({
+          units: [
+            {
+              startIndex: 8,
+              endIndex: 11,
+              translation: '回应就像是',
+              sentenceEnd: false,
+            },
+            {
+              startIndex: 12,
+              endIndex: 13,
+              translation: '这样说嘿',
+              sentenceEnd: true,
+            },
+          ],
+        }),
+      );
+    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('browser', { permissions: { contains: vi.fn().mockResolvedValue(true) } });
+    const progress: string[] = [];
+
+    const result = await translateTokenWindow(settings, recursiveTokens, (stage) => {
+      progress.push(stage);
+    });
+
+    expect(result.map((cue) => cue.translation)).toEqual([
+      '我认为应该保持清醒理智',
+      '回应就像是',
+      '这样说嘿',
+    ]);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    const lastRequest = JSON.parse(
+      String((fetchMock.mock.calls[2]?.[1] as RequestInit | undefined)?.body),
+    ) as { messages: Array<{ content: string }> };
+    expect(lastRequest.messages.at(-1)?.content).toContain('"startIndex":8');
+    expect(lastRequest.messages.at(-1)?.content).toContain('"currentTranslation":"回应就像是 嘿"');
+    expect(progress).toEqual(['translating', 'repairing-boundaries', 'repairing-boundaries']);
+  });
+
   it('reports missing runtime permission before sending a request', async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
