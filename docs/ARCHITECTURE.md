@@ -59,32 +59,9 @@ Options 是以下设置的唯一完整入口：Provider、字幕行为、样式�
 
 ## 领域模型
 
-```ts
-interface RawCue {
-  id: string;
-  startMs: number;
-  endMs: number;
-  text: string;
-}
+领域模型的唯一事实来源是 [`RawCue`、`NormalizedCue` 与 `SemanticSegment`](../src/domain/subtitle/types.ts)。管线的公开入口由 [`src/domain/subtitle/index.ts`](../src/domain/subtitle/index.ts) 导出。
 
-interface NormalizedCue extends RawCue {
-  normalizedText: string;
-  speaker?: string;
-  isNoise: boolean;
-}
-
-interface SemanticSegment {
-  id: string;
-  sourceCueIds: string[];
-  startMs: number;
-  endMs: number;
-  sourceText: string;
-  translation: string;
-  status: "pending" | "translated" | "fallback" | "failed";
-}
-```
-
-这些接口最终应由源码中的领域模块作为唯一事实来源；代码建立后，本文只保留概念和指向对应导出符号的链接。
+`RawCue` 保存 YouTube 时间事实；`NormalizedCue` 增加清洗文本、噪声和来源 cue 映射；`SemanticSegment` 表示可渲染、翻译和导出的完整语义段。
 
 ## 字幕管线
 

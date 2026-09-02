@@ -8,21 +8,22 @@ CueWeave 采用 WXT + TypeScript 构建 Manifest V3 扩展；Popup 与设置页�
 
 ## 核心栈
 
-| 层级 | 选择 | 用途 |
-| --- | --- | --- |
-| 扩展框架 | WXT | 生成 Chromium Manifest V3、管理 content script、service worker、popup 和 options 入口 |
-| 语言 | TypeScript（strict） | 统一字幕数据结构、Provider 契约和跨上下文消息类型 |
-| UI | React | Popup、设置页和需要状态管理的播放器控制界面 |
-| 样式 | 原生 CSS + CSS Custom Properties | 控制扩展体积，并让播放器覆盖层不依赖运行时样式框架 |
-| 浏览器 API | WebExtension / Chrome Extension APIs | 存储、运行时权限、消息传递、下载和扩展生命周期 |
-| 小型持久化 | `chrome.storage.local` | 用户设置、Provider 配置、非敏感索引和小型状态 |
-| 大型持久化 | IndexedDB（通过轻量封装） | 完整字幕、语义分段、翻译结果和 LRU 元数据 |
-| Schema 校验 | JSON Schema + Ajv | 校验模型结构化输出，并生成可复现的失败信息 |
-| 单元与集成测试 | Vitest | 字幕管线、Provider、缓存键、导出与错误降级 |
-| 浏览器端测试 | Playwright | 生成后的真实扩展、YouTube 页面行为和设置流程 |
-| 静态质量 | ESLint + Prettier + TypeScript | 代码规则、格式和类型检查 |
-| 包管理 | npm | 与 Node 工具链保持一致，使用锁文件保证可复现安装 |
-| CI | GitHub Actions | 类型检查、单元测试、构建、端到端测试和安装包产出 |
+| 层级           | 选择                                 | 用途                                                                                  |
+| -------------- | ------------------------------------ | ------------------------------------------------------------------------------------- |
+| 扩展框架       | WXT                                  | 生成 Chromium Manifest V3、管理 content script、service worker、popup 和 options 入口 |
+| 语言           | TypeScript（strict）                 | 统一字幕数据结构、Provider 契约和跨上下文消息类型                                     |
+| UI             | React                                | Popup、设置页和需要状态管理的播放器控制界面                                           |
+| 图标           | Phosphor Icons                       | 统一 React SVG 图标、状态字重和可访问属性                                             |
+| 样式           | 原生 CSS + CSS Custom Properties     | 控制扩展体积，并让播放器覆盖层不依赖运行时样式框架                                    |
+| 浏览器 API     | WebExtension / Chrome Extension APIs | 存储、运行时权限、消息传递、下载和扩展生命周期                                        |
+| 小型持久化     | `chrome.storage.local`               | 用户设置、Provider 配置、非敏感索引和小型状态                                         |
+| 大型持久化     | IndexedDB（通过轻量封装）            | 完整字幕、语义分段、翻译结果和 LRU 元数据                                             |
+| Schema 校验    | JSON Schema + Ajv                    | 校验模型结构化输出，并生成可复现的失败信息                                            |
+| 单元与集成测试 | Vitest                               | 字幕管线、Provider、缓存键、导出与错误降级                                            |
+| 浏览器端测试   | Playwright                           | 生成后的真实扩展、YouTube 页面行为和设置流程                                          |
+| 静态质量       | ESLint + Prettier + TypeScript       | 代码规则、格式和类型检查                                                              |
+| 包管理         | npm                                  | 与 Node 工具链保持一致，使用锁文件保证可复现安装                                      |
+| CI             | GitHub Actions                       | 类型检查、单元测试、构建、端到端测试和安装包产出                                      |
 
 Node 运行时的有效版本以仓库根目录的版本文件和 `package.json#engines` 为准，不在本文重复记录。
 

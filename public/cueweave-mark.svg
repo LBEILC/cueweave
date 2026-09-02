@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title id="title">CueWeave</title>
+  <rect width="64" height="64" rx="12" fill="#24211d"/>
+  <path d="M13 18h22c8 0 14 6 14 14s-6 14-14 14H13" fill="none" stroke="#f2a33a" stroke-width="5" stroke-linecap="square"/>
+  <path d="M13 29h22c2 0 4 1 4 3s-2 3-4 3H13" fill="none" stroke="#f4eadb" stroke-width="4" stroke-linecap="square"/>
+</svg>
