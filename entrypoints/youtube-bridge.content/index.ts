@@ -1,6 +1,11 @@
+import { addPlaybackContext, fetchCaptionTrack } from '../../src/platform/youtube/captions';
 import {
+  CAPTION_TRACK_REQUEST_EVENT,
+  CAPTION_TRACK_RESPONSE_EVENT,
   CAPTION_TRACKS_EVENT,
   type CaptionTrack,
+  type CaptionTrackRequestDetail,
+  type CaptionTrackResponseDetail,
   type CaptionTracksEventDetail,
 } from '../../src/platform/youtube/types';
 
@@ -64,6 +69,82 @@ function publishCaptionTracks(): void {
   window.dispatchEvent(new CustomEvent(CAPTION_TRACKS_EVENT, { detail }));
 }
 
+function parseCaptionTrackRequest(event: Event): CaptionTrackRequestDetail | undefined {
+  const value = (event as CustomEvent<unknown>).detail;
+  if (typeof value !== 'string') return undefined;
+
+  try {
+    const detail = JSON.parse(value) as CaptionTrackRequestDetail;
+    const url = new URL(detail.track.baseUrl);
+    const isYouTubeCaptionUrl =
+      url.protocol === 'https:' &&
+      (url.hostname === 'youtube.com' || url.hostname.endsWith('.youtube.com')) &&
+      url.pathname === '/api/timedtext';
+
+    return detail.requestId && detail.track.languageCode && isYouTubeCaptionUrl
+      ? detail
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function publishCaptionTrackResponse(detail: CaptionTrackResponseDetail): void {
+  window.dispatchEvent(
+    new CustomEvent(CAPTION_TRACK_RESPONSE_EVENT, { detail: JSON.stringify(detail) }),
+  );
+}
+
+function findObservedCaptionUrl(track: CaptionTrack): string | undefined {
+  const requested = new URL(track.baseUrl);
+  const videoId = requested.searchParams.get('v');
+  const entries = performance.getEntriesByType('resource').slice().reverse();
+
+  for (const entry of entries) {
+    try {
+      const observed = new URL(entry.name);
+      const isMatchingTrack =
+        observed.hostname.endsWith('.youtube.com') &&
+        observed.pathname === '/api/timedtext' &&
+        observed.searchParams.get('v') === videoId &&
+        observed.searchParams.get('lang') === track.languageCode &&
+        observed.searchParams.has('pot');
+      if (isMatchingTrack) return observed.toString();
+    } catch {
+      // Ignore non-URL resource entries.
+    }
+  }
+
+  return undefined;
+}
+
+async function waitForObservedCaptionUrl(track: CaptionTrack): Promise<string | undefined> {
+  if (new URL(track.baseUrl).searchParams.has('pot')) return track.baseUrl;
+
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    const observed = findObservedCaptionUrl(track);
+    if (observed) return observed;
+    await new Promise((resolve) => window.setTimeout(resolve, 250));
+  }
+
+  return undefined;
+}
+
+async function respondWithCaptionTrack(detail: CaptionTrackRequestDetail): Promise<void> {
+  try {
+    const observedUrl = await waitForObservedCaptionUrl(detail.track);
+    const track = observedUrl ? addPlaybackContext(detail.track, observedUrl) : detail.track;
+    const cues = await fetchCaptionTrack(track);
+    publishCaptionTrackResponse({ requestId: detail.requestId, ok: true, cues });
+  } catch (error) {
+    publishCaptionTrackResponse({
+      requestId: detail.requestId,
+      ok: false,
+      error: error instanceof Error ? error.message : '字幕轨读取失败，请刷新视频后重试。',
+    });
+  }
+}
+
 export default defineContentScript({
   matches: ['*://www.youtube.com/*'],
   world: 'MAIN',
@@ -78,6 +159,10 @@ export default defineContentScript({
     window.addEventListener('yt-navigate-finish', publishSoon);
     window.addEventListener('yt-page-data-updated', publishSoon);
     window.addEventListener('popstate', publishSoon);
+    window.addEventListener(CAPTION_TRACK_REQUEST_EVENT, (event) => {
+      const detail = parseCaptionTrackRequest(event);
+      if (detail) void respondWithCaptionTrack(detail);
+    });
     publishSoon();
   },
 });

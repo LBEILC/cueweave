@@ -1,3 +1,5 @@
+import type { RawCue } from '../../domain/subtitle';
+
 export interface CaptionTrack {
   baseUrl: string;
   languageCode: string;
@@ -9,6 +11,23 @@ export interface CaptionTracksEventDetail {
   videoId: string;
   tracks: CaptionTrack[];
 }
+
+export interface CaptionTrackRequestDetail {
+  requestId: string;
+  track: CaptionTrack;
+}
+
+export type CaptionTrackResponseDetail =
+  | {
+      requestId: string;
+      ok: true;
+      cues: RawCue[];
+    }
+  | {
+      requestId: string;
+      ok: false;
+      error: string;
+    };
 
 export type ContentStatus = 'idle' | 'loading' | 'ready' | 'no-captions' | 'error';
 
@@ -23,4 +42,6 @@ export interface ContentState {
 }
 
 export const CAPTION_TRACKS_EVENT = 'cueweave:caption-tracks';
+export const CAPTION_TRACK_REQUEST_EVENT = 'cueweave:caption-track-request';
+export const CAPTION_TRACK_RESPONSE_EVENT = 'cueweave:caption-track-response';
 export const GET_CONTENT_STATE_MESSAGE = 'cueweave:get-content-state';

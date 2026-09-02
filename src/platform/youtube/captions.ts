@@ -21,6 +21,22 @@ interface ParsedCaptionEvent {
   text: string;
 }
 
+const PLAYBACK_CONTEXT_PARAMS = [
+  'pot',
+  'potc',
+  'c',
+  'cver',
+  'cplayer',
+  'cbr',
+  'cbrver',
+  'cos',
+  'cosver',
+  'cplatform',
+  'xorb',
+  'xobt',
+  'xovt',
+] as const;
+
 function parseCaptionEvents(payload: Json3CaptionPayload): ParsedCaptionEvent[] {
   return (payload.events ?? [])
     .map((event) => ({
@@ -48,6 +64,18 @@ export function parseJson3Captions(payload: Json3CaptionPayload): RawCue[] {
   });
 }
 
+export function addPlaybackContext(track: CaptionTrack, observedCaptionUrl: string): CaptionTrack {
+  const target = new URL(track.baseUrl);
+  const observed = new URL(observedCaptionUrl);
+
+  for (const key of PLAYBACK_CONTEXT_PARAMS) {
+    const value = observed.searchParams.get(key);
+    if (value) target.searchParams.set(key, value);
+  }
+
+  return { ...track, baseUrl: target.toString() };
+}
+
 export async function fetchCaptionTrack(
   track: CaptionTrack,
   signal?: AbortSignal,
@@ -65,5 +93,22 @@ export async function fetchCaptionTrack(
     );
   }
 
-  return parseJson3Captions((await response.json()) as Json3CaptionPayload);
+  const body = await response.text();
+  if (!body.trim()) {
+    throw new Error('YouTube 返回了空字幕数据，请刷新视频页面后重试。');
+  }
+
+  let payload: Json3CaptionPayload;
+  try {
+    payload = JSON.parse(body) as Json3CaptionPayload;
+  } catch {
+    throw new Error('YouTube 返回了无法识别的字幕格式，请刷新视频页面后重试。');
+  }
+
+  const cues = parseJson3Captions(payload);
+  if (cues.length === 0) {
+    throw new Error('YouTube 字幕轨中没有可显示的文本。');
+  }
+
+  return cues;
 }
