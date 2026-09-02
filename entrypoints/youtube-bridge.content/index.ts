@@ -1,4 +1,8 @@
-import { addPlaybackContext, fetchCaptionTrack } from '../../src/platform/youtube/captions';
+import {
+  addPlaybackContext,
+  fetchCaptionTrack,
+  fetchCaptionTrackViaInnertube,
+} from '../../src/platform/youtube/captions';
 import {
   CAPTION_TRACK_REQUEST_EVENT,
   CAPTION_TRACK_RESPONSE_EVENT,
@@ -130,7 +134,38 @@ async function waitForObservedCaptionUrl(track: CaptionTrack): Promise<string | 
   return undefined;
 }
 
+function readInnertubeApiKey(): string | undefined {
+  const configured = (
+    window as typeof window & { ytcfg?: { get?: (key: string) => unknown } }
+  ).ytcfg?.get?.('INNERTUBE_API_KEY');
+  if (typeof configured === 'string' && configured.length > 0) return configured;
+
+  for (const script of document.scripts) {
+    const match = script.textContent?.match(/"INNERTUBE_API_KEY":"([A-Za-z0-9_-]+)"/u);
+    if (match?.[1]) return match[1];
+  }
+
+  return undefined;
+}
+
 async function respondWithCaptionTrack(detail: CaptionTrackRequestDetail): Promise<void> {
+  const videoId = new URL(detail.track.baseUrl).searchParams.get('v');
+  const apiKey = readInnertubeApiKey();
+
+  if (videoId && apiKey) {
+    try {
+      const cues = await fetchCaptionTrackViaInnertube({
+        videoId,
+        apiKey,
+        preferredLanguageCode: detail.track.languageCode,
+      });
+      publishCaptionTrackResponse({ requestId: detail.requestId, ok: true, cues });
+      return;
+    } catch {
+      // Fall back to the signed WEB track for videos that require the current browser session.
+    }
+  }
+
   try {
     const observedUrl = await waitForObservedCaptionUrl(detail.track);
     const track = observedUrl ? addPlaybackContext(detail.track, observedUrl) : detail.track;

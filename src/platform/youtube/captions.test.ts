@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { addPlaybackContext, fetchCaptionTrack, parseJson3Captions } from './captions';
+import {
+  addPlaybackContext,
+  fetchCaptionTrack,
+  fetchCaptionTrackViaInnertube,
+  parseJson3Captions,
+} from './captions';
 
 const track = {
   baseUrl: 'https://www.youtube.com/api/timedtext?v=test&lang=en',
@@ -72,5 +77,49 @@ describe('parseJson3Captions', () => {
     expect(url.searchParams.get('c')).toBe('WEB');
     expect(url.searchParams.get('tlang')).toBeNull();
     expect(contextualized.languageCode).toBe('en');
+  });
+
+  it('loads an independent caption track through the Android Innertube client', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            captions: {
+              playerCaptionsTracklistRenderer: {
+                captionTracks: [
+                  {
+                    baseUrl: track.baseUrl,
+                    languageCode: 'en',
+                    kind: 'asr',
+                    name: { simpleText: 'English' },
+                  },
+                ],
+              },
+            },
+          }),
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            events: [{ tStartMs: 100, dDurationMs: 400, segs: [{ utf8: 'Independent' }] }],
+          }),
+        ),
+      );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const cues = await fetchCaptionTrackViaInnertube({
+      videoId: 'test',
+      apiKey: 'public-page-key',
+      preferredLanguageCode: 'en',
+    });
+
+    expect(cues[0]?.text).toBe('Independent');
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      expect.stringContaining('/youtubei/v1/player?key=public-page-key'),
+      expect.objectContaining({ method: 'POST', credentials: 'omit' }),
+    );
   });
 });
