@@ -66,7 +66,7 @@ describe('AI subtitle output', () => {
     ).toThrow('遗漏、重复或乱序');
   });
 
-  it('rejects extra fields and only splits translations longer than 36 characters', () => {
+  it('rejects extra fields while keeping a long semantic unit intact', () => {
     const tokens = tokensFor('One two three four five six seven eight nine ten eleven twelve.');
     const unit = {
       startIndex: 0,
@@ -84,24 +84,45 @@ describe('AI subtitle output', () => {
     ).toThrow('不符合结构要求');
 
     const result = parseAiSubtitleOutput(JSON.stringify({ units: [unit] }), tokens);
-    expect(result.length).toBeGreaterThan(1);
-    expect(result.every((cue) => Array.from(cue.translation).length <= 36)).toBe(true);
-    expect(result.flatMap((cue) => cue.sourceTokenIds)).toEqual(tokens.map((token) => token.id));
-    expect(result.at(-1)?.sentenceEnd).toBe(true);
-    expect(result.slice(0, -1).every((cue) => !cue.sentenceEnd)).toBe(true);
+    expect(result).toHaveLength(1);
+    expect(result[0]?.translation).toBe(unit.translation);
+    expect(result[0]?.sourceTokenIds).toEqual(tokens.map((token) => token.id));
+    expect(result[0]?.sentenceEnd).toBe(true);
   });
 
-  it('splits a readable clause boundary near 20 characters', () => {
+  it('rejects readable clause punctuation unless the model returns exact token ranges', () => {
     const tokens = tokensFor(
       'The better the model understands business intent the better it performs.',
     );
+    expect(() =>
+      parseAiSubtitleOutput(
+        JSON.stringify({
+          units: [
+            {
+              startIndex: 0,
+              endIndex: 10,
+              translation: '模型越能理解企业的业务意图，表现就越好。',
+              sentenceEnd: true,
+            },
+          ],
+        }),
+        tokens,
+      ),
+    ).toThrow('请改用多个连续词元范围');
+
     const result = parseAiSubtitleOutput(
       JSON.stringify({
         units: [
           {
             startIndex: 0,
+            endIndex: 6,
+            translation: '模型越能理解企业的业务意图',
+            sentenceEnd: false,
+          },
+          {
+            startIndex: 7,
             endIndex: 10,
-            translation: '模型越能理解企业的业务意图，表现就越好。',
+            translation: '表现就越好',
             sentenceEnd: true,
           },
         ],
@@ -114,6 +135,10 @@ describe('AI subtitle output', () => {
       '表现就越好',
     ]);
     expect(result.flatMap((cue) => cue.sourceTokenIds)).toEqual(tokens.map((token) => token.id));
+    expect(result.map((cue) => cue.sourceText)).toEqual([
+      'The better the model understands business intent',
+      'the better it performs.',
+    ]);
   });
 
   it('keeps a longer translation intact when it has no natural boundary', () => {
@@ -135,6 +160,32 @@ describe('AI subtitle output', () => {
 
     expect(result).toHaveLength(1);
     expect(result[0]?.translation).toBe(translation);
+  });
+
+  it('never splits an English term or proportionally remaps its source tokens', () => {
+    const source =
+      'and I also think that it is in our business interest to make sure that we have safe reliable robust AI like customers want this.';
+    const tokens = tokensFor(source);
+    const translation = '我也认为确保我们拥有安全可靠且稳健的AI符合我们的商业利益因为客户想要这样';
+    const result = parseAiSubtitleOutput(
+      JSON.stringify({
+        units: [
+          {
+            startIndex: 0,
+            endIndex: tokens.length - 1,
+            translation,
+            sentenceEnd: true,
+          },
+        ],
+      }),
+      tokens,
+    );
+
+    expect(result).toHaveLength(1);
+    expect(result[0]?.translation).toBe(translation);
+    expect(result[0]?.translation).toContain('AI');
+    expect(result[0]?.sourceText).toBe(source);
+    expect(result[0]?.sourceTokenIds).toEqual(tokens.map((token) => token.id));
   });
 
   it('removes hidden punctuation while preserving a Chinese enumeration comma', () => {
@@ -160,6 +211,9 @@ describe('AI subtitle output', () => {
   it('includes display constraints and indexed tokens in the prompt', () => {
     const prompt = buildAiSubtitlePrompt(tokensFor('Hello world.'));
     expect(prompt).toContain('不得出现在 translation 中');
+    expect(prompt).toContain('不能仅为了满足字符数硬切');
+    expect(prompt).toContain('不得拆开 AI 等英文词');
+    expect(prompt).not.toContain('36');
     expect(prompt).toContain('{"index":0,"text":"Hello"}');
     expect(prompt).toContain('{"index":1,"text":"world."}');
   });

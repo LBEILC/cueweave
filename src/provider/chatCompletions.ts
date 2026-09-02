@@ -278,7 +278,7 @@ export async function translateTokenWindow(
             { role: 'assistant' as const, content: invalidContent },
             {
               role: 'user' as const,
-              content: `上一次结果未通过完整性校验：${lastError instanceof Error ? lastError.message : '未知结构错误'} 请重新返回全部词元，确保每个 unit 的 startIndex 紧接前一个 endIndex，索引连续、无遗漏、无重复。translation 优先保持完整语义；只有超过 36 个 Unicode 字符时才拆分对应的 source 词元范围。禁止为两条 translation 重复同一 source 范围。`,
+              content: `上一次结果未通过完整性校验：${lastError instanceof Error ? lastError.message : '未知结构错误'} 请重新返回全部词元，确保每个 unit 的 startIndex 紧接前一个 endIndex，索引连续、无遗漏、无重复。translation 优先保持完整语义，不能仅为了字符数硬切；只有存在完整句、从句或可独立阅读的短语边界时才拆分，并为每个 unit 分配语义准确的连续英文词元范围。禁止拆开英文词、专有名词或数字，禁止为两条 translation 重复同一 source 范围。`,
             },
           ],
       responseFormat,
