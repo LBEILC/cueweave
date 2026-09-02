@@ -339,10 +339,15 @@ footer {
 }
 
 .privacy-summary,
+.footer-actions,
 .settings-link {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+}
+
+.footer-actions {
+  gap: 8px;
 }
 
 .settings-link {
@@ -361,6 +366,11 @@ footer {
 .settings-link:focus-visible {
   outline: 2px solid oklch(0.83 0.12 75 / 55%);
   outline-offset: 2px;
+}
+
+.settings-link:disabled {
+  cursor: not-allowed;
+  opacity: 0.38;
 }
 
 @keyframes spin {

@@ -1,4 +1,9 @@
-import type { RawCue } from '../../domain/subtitle';
+import type {
+  DisplayCue,
+  RawCue,
+  TranscriptCorrection,
+  TranslationTerm,
+} from '../../domain/subtitle';
 import type { SubtitleDisplayMode, SubtitlePreferences } from '../../settings/subtitle';
 
 export interface CaptionTrack {
@@ -44,6 +49,25 @@ export interface ContentState {
   aiStatus: AiStatus;
   aiMessage?: string | undefined;
   message?: string | undefined;
+  correctionCount?: number | undefined;
+  translatedWindowCount?: number | undefined;
+  totalWindowCount?: number | undefined;
+  fullTranslationStatus?: 'idle' | 'working' | 'ready' | 'error' | undefined;
+}
+
+export interface TranscriptReport {
+  videoId: string;
+  videoTitle: string;
+  languageCode?: string;
+  originalCues: DisplayCue[];
+  translatedCues: DisplayCue[];
+  corrections: TranscriptCorrection[];
+  terminology: TranslationTerm[];
+  translatedWindowCount: number;
+  totalWindowCount: number;
+  translationComplete: boolean;
+  fullTranslationStatus: 'idle' | 'working' | 'ready' | 'error';
+  message?: string;
 }
 
 export const CAPTION_TRACKS_EVENT = 'cueweave:caption-tracks';
@@ -54,6 +78,8 @@ export const GET_CONTENT_SETTINGS_MESSAGE = 'cueweave:get-content-settings';
 export const SET_CONTENT_ENABLED_MESSAGE = 'cueweave:set-content-enabled';
 export const SET_SUBTITLE_PREFERENCES_MESSAGE = 'cueweave:set-subtitle-preferences';
 export const UPDATE_SUBTITLE_PREFERENCES_MESSAGE = 'cueweave:update-subtitle-preferences';
+export const GET_TRANSCRIPT_REPORT_MESSAGE = 'cueweave:get-transcript-report';
+export const START_FULL_TRANSLATION_MESSAGE = 'cueweave:start-full-translation';
 
 export interface ContentSettings {
   enabled: boolean;

@@ -7,6 +7,7 @@ import {
   FloppyDiskIcon,
   KeyIcon,
   LinkSimpleIcon,
+  MagicWandIcon,
   PlugsConnectedIcon,
   RectangleIcon,
   ShieldCheckIcon,
@@ -330,8 +331,8 @@ export function App() {
           <header className="section-heading">
             <div>
               <p className="section-index">02 / SUBTITLE DISPLAY</p>
-              <h2 id="display-heading">调整字幕显示</h2>
-              <p>设置会保存在当前浏览器，并立即应用到已打开的 YouTube 页面。</p>
+              <h2 id="display-heading">字幕智能与显示</h2>
+              <p>控制转录修复和播放器显示；设置会立即应用到已打开的 YouTube 页面。</p>
             </div>
             <SubtitlesIcon size={26} weight="regular" aria-hidden="true" />
           </header>
@@ -343,6 +344,30 @@ export function App() {
               void saveDisplaySettings();
             }}
           >
+            <div className="field-row display-field">
+              <span className="field-icon" aria-hidden="true">
+                <MagicWandIcon size={19} />
+              </span>
+              <span className="field-copy">
+                <span className="field-label">AI 修复转录错误</span>
+                <span className="field-help">修正高置信度的人名、产品名和明显识别错误</span>
+              </span>
+              <button
+                className="toggle-control"
+                type="button"
+                aria-pressed={subtitle.transcriptCorrectionEnabled}
+                onClick={() =>
+                  updateSubtitle(
+                    'transcriptCorrectionEnabled',
+                    !subtitle.transcriptCorrectionEnabled,
+                  )
+                }
+              >
+                <span aria-hidden="true" />
+                {subtitle.transcriptCorrectionEnabled ? '开启' : '关闭'}
+              </button>
+            </div>
+
             <div className="field-row display-field">
               <span className="field-icon" aria-hidden="true">
                 <TranslateIcon size={19} />

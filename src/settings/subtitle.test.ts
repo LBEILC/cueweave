@@ -19,6 +19,7 @@ describe('subtitle preferences', () => {
     ).toEqual({
       displayMode: 'translation',
       bilingualOrder: 'source-first',
+      transcriptCorrectionEnabled: true,
       positionPercent: 28,
       sizePercent: 75,
       backgroundEnabled: false,

@@ -33,6 +33,27 @@ export interface TokenWindow {
   tokens: SourceToken[];
 }
 
+export type TranscriptCorrectionCategory = 'proper-noun' | 'asr-error' | 'formatting' | 'other';
+
+export interface TranscriptCorrection {
+  id: string;
+  startIndex: number;
+  endIndex: number;
+  sourceTokenIds: string[];
+  startMs: number;
+  endMs: number;
+  originalText: string;
+  correctedText: string;
+  confidence: number;
+  category: TranscriptCorrectionCategory;
+  applied: boolean;
+}
+
+export interface TranslationTerm {
+  source: string;
+  translation: string;
+}
+
 export interface SemanticSegment {
   id: string;
   sourceCueIds: string[];
@@ -49,6 +70,9 @@ export interface DisplayCue {
   startMs: number;
   endMs: number;
   sourceText: string;
+  originalText?: string;
+  corrections?: TranscriptCorrection[];
+  terminology?: TranslationTerm[];
   translation: string;
   sentenceEnd: boolean;
   status: SegmentStatus;

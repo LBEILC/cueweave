@@ -1,4 +1,5 @@
 import {
+  isCancelTranslationSessionMessage,
   isClearTranslationCacheMessage,
   isGetTranslationCacheStatsMessage,
   isTestProviderMessage,
@@ -12,8 +13,14 @@ import { readProviderSettings } from '../src/provider/settings';
 import { testProviderConnection, translateTokenWindow } from '../src/provider/chatCompletions';
 import { ProviderError } from '../src/provider/types';
 import { AI_PROMPT_VERSION, DISPLAY_SEGMENTATION_VERSION } from '../src/domain/subtitle/ai';
+import type { DisplayCue } from '../src/domain/subtitle';
 import { createTranslationCacheKey, TranslationCache } from '../src/cache/translationCache';
 import { TranslationQueue } from '../src/provider/translationQueue';
+import {
+  clearVideoGlossary,
+  mergeVideoGlossary,
+  readVideoGlossary,
+} from '../src/context/videoGlossary';
 import {
   GET_CONTENT_SETTINGS_MESSAGE,
   SET_SUBTITLE_PREFERENCES_MESSAGE,
@@ -28,6 +35,7 @@ import {
 const ENABLED_KEY = 'cueweave.enabled';
 const translationCache = new TranslationCache();
 const translationQueue = new TranslationQueue(2);
+const translationSessionControllers = new Map<string, Set<AbortController>>();
 let cacheGeneration = 0;
 
 async function broadcastSubtitlePreferences(preferences: SubtitlePreferences): Promise<void> {
@@ -76,8 +84,23 @@ function validTranslationContext(message: TranslateWindowMessage): boolean {
     message.context.languageCode.length > 0 &&
     message.context.languageCode.length <= 32 &&
     message.context.windowId.length > 0 &&
-    message.context.windowId.length <= 512
+    message.context.windowId.length <= 512 &&
+    message.context.sessionId.length > 0 &&
+    message.context.sessionId.length <= 128 &&
+    (message.context.videoTitle?.length ?? 0) <= 200 &&
+    (message.context.channelName?.length ?? 0) <= 120 &&
+    (message.previousCues?.length ?? 0) <= 6 &&
+    (message.previousCues ?? []).every(
+      (cue) => cue.sourceText.length <= 500 && cue.translation.length <= 500,
+    )
   );
+}
+
+async function rememberCueTerminology(videoId: string, cues: readonly DisplayCue[]): Promise<void> {
+  const discoveredTerms = cues.flatMap((cue) => cue.terminology ?? []);
+  if (discoveredTerms.length > 0) {
+    await mergeVideoGlossary(videoId, discoveredTerms).catch(() => undefined);
+  }
 }
 
 async function translateWindowMessage(
@@ -94,8 +117,14 @@ async function translateWindowMessage(
     };
   }
 
+  const requestController = new AbortController();
+  const sessionControllers = translationSessionControllers.get(message.context.sessionId);
+  if (sessionControllers) sessionControllers.add(requestController);
+  else translationSessionControllers.set(message.context.sessionId, new Set([requestController]));
+
   try {
     const settings = await readProviderSettings();
+    const terminology = await readVideoGlossary(message.context.videoId).catch(() => []);
     const cacheKey = await createTranslationCacheKey({
       ...message.context,
       baseUrl: settings.baseUrl,
@@ -104,25 +133,51 @@ async function translateWindowMessage(
       promptVersion: AI_PROMPT_VERSION,
       segmentationVersion: DISPLAY_SEGMENTATION_VERSION,
       tokens: message.tokens,
+      ...(message.context.videoTitle ? { videoTitle: message.context.videoTitle } : {}),
+      ...(message.context.channelName ? { channelName: message.context.channelName } : {}),
+      correctionEnabled: message.context.correctionEnabled,
     });
 
     try {
       const cachedCues = await translationCache.get(cacheKey, message.context.videoId);
-      if (cachedCues) return { ok: true, cues: cachedCues, cacheHit: true };
+      if (cachedCues) {
+        await rememberCueTerminology(message.context.videoId, cachedCues);
+        return { ok: true, cues: cachedCues, cacheHit: true };
+      }
     } catch {
       // IndexedDB failure must not block live translation.
     }
 
-    return await translationQueue.enqueue(cacheKey, message.priority, async () => {
+    const queueKey = `${cacheKey}:${message.context.sessionId}`;
+    return await translationQueue.enqueue(queueKey, message.priority, async () => {
+      if (requestController.signal.aborted) {
+        throw new ProviderError('cancelled', '翻译请求已取消。');
+      }
       try {
         const cachedCues = await translationCache.get(cacheKey, message.context.videoId);
-        if (cachedCues) return { ok: true, cues: cachedCues, cacheHit: true } as const;
+        if (cachedCues) {
+          await rememberCueTerminology(message.context.videoId, cachedCues);
+          return { ok: true, cues: cachedCues, cacheHit: true } as const;
+        }
       } catch {
         // A second cache read closes the race between identical queued requests.
       }
 
       const writeGeneration = cacheGeneration;
-      const cues = await translateTokenWindow(settings, message.tokens, onProgress);
+      const cues = await translateTokenWindow(
+        settings,
+        message.tokens,
+        onProgress,
+        requestController.signal,
+        {
+          ...(message.context.videoTitle ? { videoTitle: message.context.videoTitle } : {}),
+          ...(message.context.channelName ? { channelName: message.context.channelName } : {}),
+          correctionEnabled: message.context.correctionEnabled,
+          terminology,
+          ...(message.previousCues ? { previousCues: message.previousCues } : {}),
+        },
+      );
+      await rememberCueTerminology(message.context.videoId, cues);
       try {
         if (writeGeneration === cacheGeneration) {
           await translationCache.put(cacheKey, cues, message.context.videoId);
@@ -143,6 +198,12 @@ async function translateWindowMessage(
               message: '字幕翻译请求失败。CueWeave 已保留原文字幕。',
             },
     };
+  } finally {
+    const controllers = translationSessionControllers.get(message.context.sessionId);
+    controllers?.delete(requestController);
+    if (controllers?.size === 0) {
+      translationSessionControllers.delete(message.context.sessionId);
+    }
   }
 }
 
@@ -197,6 +258,13 @@ export default defineBackground(() => {
         }));
     }
 
+    if (isCancelTranslationSessionMessage(message)) {
+      const controllers = translationSessionControllers.get(message.sessionId);
+      controllers?.forEach((controller) => controller.abort());
+      translationSessionControllers.delete(message.sessionId);
+      return Promise.resolve({ ok: true, cancelled: controllers?.size ?? 0 });
+    }
+
     if (isGetTranslationCacheStatsMessage(message)) {
       return translationCache
         .getStats(message.videoId)
@@ -209,12 +277,13 @@ export default defineBackground(() => {
 
     if (isClearTranslationCacheMessage(message)) {
       cacheGeneration += 1;
-      return (
+      return Promise.all([
         message.videoId
           ? translationCache.clearVideo(message.videoId)
-          : translationCache.clear().then(() => undefined)
-      )
-        .then(async (removedEntries) => ({
+          : translationCache.clear().then(() => undefined),
+        clearVideoGlossary(message.videoId),
+      ])
+        .then(async ([removedEntries]) => ({
           ok: true,
           removedEntries,
           stats: await translationCache.getStats(message.videoId),

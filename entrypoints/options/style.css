@@ -569,7 +569,8 @@ input[type='range']:disabled {
   .field-row > .key-input,
   .display-field > .segmented-control,
   .display-field > .range-control,
-  .display-field > .background-controls {
+  .display-field > .background-controls,
+  .display-field > .toggle-control {
     grid-column: 1 / -1;
   }
 

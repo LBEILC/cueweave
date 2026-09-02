@@ -4,6 +4,7 @@ import type { ProviderFailure, ProviderTestResult } from './types';
 export const TEST_PROVIDER_MESSAGE = 'cueweave:test-provider';
 export const TRANSLATE_WINDOW_MESSAGE = 'cueweave:translate-window';
 export const TRANSLATION_PROGRESS_MESSAGE = 'cueweave:translation-progress';
+export const CANCEL_TRANSLATION_SESSION_MESSAGE = 'cueweave:cancel-translation-session';
 export const GET_TRANSLATION_CACHE_STATS_MESSAGE = 'cueweave:get-translation-cache-stats';
 export const CLEAR_TRANSLATION_CACHE_MESSAGE = 'cueweave:clear-translation-cache';
 
@@ -14,6 +15,15 @@ export interface TranslationContext {
   videoId: string;
   languageCode: string;
   windowId: string;
+  sessionId: string;
+  videoTitle?: string;
+  channelName?: string;
+  correctionEnabled: boolean;
+}
+
+export interface CancelTranslationSessionMessage {
+  type: typeof CANCEL_TRANSLATION_SESSION_MESSAGE;
+  sessionId: string;
 }
 
 export interface TestProviderMessage {
@@ -25,6 +35,7 @@ export interface TranslateWindowMessage {
   tokens: SourceToken[];
   context: TranslationContext;
   priority: TranslationPriority;
+  previousCues?: Array<{ sourceText: string; translation: string }>;
 }
 
 export interface TranslationProgressMessage {
@@ -37,6 +48,21 @@ export type TranslateWindowResult =
   { ok: true; cues: DisplayCue[]; cacheHit: boolean } | { ok: false; error: ProviderFailure };
 
 export type TestProviderResult = ProviderTestResult;
+
+export function isCancelTranslationSessionMessage(
+  value: unknown,
+): value is CancelTranslationSessionMessage {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'type' in value &&
+    value.type === CANCEL_TRANSLATION_SESSION_MESSAGE &&
+    'sessionId' in value &&
+    typeof value.sessionId === 'string' &&
+    value.sessionId.length > 0 &&
+    value.sessionId.length <= 128
+  );
+}
 
 export interface GetTranslationCacheStatsMessage {
   type: typeof GET_TRANSLATION_CACHE_STATS_MESSAGE;
@@ -99,6 +125,28 @@ export function isTranslateWindowMessage(value: unknown): value is TranslateWind
     'languageCode' in value.context &&
     typeof value.context.languageCode === 'string' &&
     'windowId' in value.context &&
-    typeof value.context.windowId === 'string'
+    typeof value.context.windowId === 'string' &&
+    'sessionId' in value.context &&
+    typeof value.context.sessionId === 'string' &&
+    'correctionEnabled' in value.context &&
+    typeof value.context.correctionEnabled === 'boolean' &&
+    (!('videoTitle' in value.context) ||
+      value.context.videoTitle === undefined ||
+      typeof value.context.videoTitle === 'string') &&
+    (!('channelName' in value.context) ||
+      value.context.channelName === undefined ||
+      typeof value.context.channelName === 'string') &&
+    (!('previousCues' in value) ||
+      value.previousCues === undefined ||
+      (Array.isArray(value.previousCues) &&
+        value.previousCues.every(
+          (cue) =>
+            typeof cue === 'object' &&
+            cue !== null &&
+            'sourceText' in cue &&
+            typeof cue.sourceText === 'string' &&
+            'translation' in cue &&
+            typeof cue.translation === 'string',
+        )))
   );
 }

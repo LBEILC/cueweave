@@ -59,6 +59,7 @@ npx vitest run src/provider/real-world.integration.test.ts
 5. 选择 `.output/chrome-mv3`。
 6. 打开带字幕的 YouTube 视频并刷新一次页面。
 7. 点击 CueWeave 图标，确认字幕覆盖层已开启。
+8. 点击 Popup 底部的“字幕工具”，确认工作台能显示当前视频、翻译进度和修正记录；原始转录可直接导出，其余导出模式先点击“翻译全部字幕”。
 
 这个流程只加载本地构建，不需要 API Key。字幕读取失败时，先确认视频本身存在字幕轨，再刷新视频页面并查看 Popup 中的具体状态。
 
@@ -78,4 +79,6 @@ npm run zip
 - [`createLocalDisplayCues`](../src/domain/subtitle/tokens.ts)：生成不依赖模型的原文降级字幕。
 - [`createTokenWindows`](../src/domain/subtitle/tokens.ts)：为模型构建有界连续上下文。
 - [`parseAiSubtitleOutput`](../src/domain/subtitle/ai.ts)：校验模型结构、词元覆盖、原文完整性和中文长度。
+- [`serializeSubtitleFile`](../src/domain/subtitle/export.ts)：校验并序列化原始转录、修复原文、中文或双语 SRT / WebVTT。
+- [`readVideoGlossary`](../src/context/videoGlossary.ts)：读取、清洗并维护按视频隔离的双语术语记忆。
 - [`parseJson3Captions`](../src/platform/youtube/captions.ts)：保留 YouTube JSON3 cue 与词级时间的适配边界。

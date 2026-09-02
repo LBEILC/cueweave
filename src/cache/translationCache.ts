@@ -19,6 +19,9 @@ export interface TranslationCacheIdentity {
   promptVersion: string;
   segmentationVersion: string;
   tokens: readonly SourceToken[];
+  videoTitle?: string;
+  channelName?: string;
+  correctionEnabled?: boolean;
 }
 
 interface TranslationCacheRecord {
@@ -69,6 +72,34 @@ function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
 }
 
+function isTranscriptCorrection(value: unknown): boolean {
+  if (typeof value !== 'object' || value === null) return false;
+  const correction = value as Record<string, unknown>;
+  return (
+    typeof correction.id === 'string' &&
+    isFiniteNumber(correction.startIndex) &&
+    isFiniteNumber(correction.endIndex) &&
+    Array.isArray(correction.sourceTokenIds) &&
+    correction.sourceTokenIds.every((tokenId) => typeof tokenId === 'string') &&
+    isFiniteNumber(correction.startMs) &&
+    isFiniteNumber(correction.endMs) &&
+    typeof correction.originalText === 'string' &&
+    typeof correction.correctedText === 'string' &&
+    isFiniteNumber(correction.confidence) &&
+    correction.confidence >= 0 &&
+    correction.confidence <= 1 &&
+    typeof correction.category === 'string' &&
+    ['proper-noun', 'asr-error', 'formatting', 'other'].includes(correction.category) &&
+    typeof correction.applied === 'boolean'
+  );
+}
+
+function isTranslationTerm(value: unknown): boolean {
+  if (typeof value !== 'object' || value === null) return false;
+  const term = value as Record<string, unknown>;
+  return typeof term.source === 'string' && typeof term.translation === 'string';
+}
+
 function isDisplayCue(value: unknown): value is DisplayCue {
   if (typeof value !== 'object' || value === null) return false;
   const cue = value as Record<string, unknown>;
@@ -80,6 +111,11 @@ function isDisplayCue(value: unknown): value is DisplayCue {
     isFiniteNumber(cue.endMs) &&
     cue.endMs >= cue.startMs &&
     typeof cue.sourceText === 'string' &&
+    (cue.originalText === undefined || typeof cue.originalText === 'string') &&
+    (cue.corrections === undefined ||
+      (Array.isArray(cue.corrections) && cue.corrections.every(isTranscriptCorrection))) &&
+    (cue.terminology === undefined ||
+      (Array.isArray(cue.terminology) && cue.terminology.every(isTranslationTerm))) &&
     typeof cue.translation === 'string' &&
     typeof cue.sentenceEnd === 'boolean' &&
     cue.status === 'translated'
@@ -115,6 +151,9 @@ function canonicalCacheInput(identity: TranslationCacheIdentity): string {
     protocol: identity.protocol,
     promptVersion: identity.promptVersion,
     segmentationVersion: identity.segmentationVersion,
+    videoTitle: identity.videoTitle ?? '',
+    channelName: identity.channelName ?? '',
+    correctionEnabled: identity.correctionEnabled !== false,
     tokens: identity.tokens.map((token) => ({
       id: token.id,
       cueId: token.cueId,

@@ -159,12 +159,15 @@ export function createLocalDisplayCues(
       const last = chunk.at(-1);
       if (!first || !last) return;
 
+      const sourceText = joinTokenText(chunk);
       displayCues.push({
         id: `display:${first.id}:${last.id}`,
         sourceTokenIds: chunk.map((token) => token.id),
         startMs: first.startMs,
         endMs: last.endMs,
-        sourceText: joinTokenText(chunk),
+        sourceText,
+        originalText: sourceText,
+        corrections: [],
         translation: '',
         sentenceEnd: chunkIndex === chunks.length - 1,
         status: 'fallback',

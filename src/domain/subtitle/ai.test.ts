@@ -336,13 +336,167 @@ describe('AI subtitle output', () => {
     expect(result[0]?.translation).toBe('模型支持文本、图像和音频');
   });
 
+  it('applies a high-confidence ASR correction while preserving the original text', () => {
+    const tokens = tokensFor('We use Chat GTT every day.');
+    const result = parseAiSubtitleOutput(
+      JSON.stringify({
+        units: [
+          {
+            startIndex: 0,
+            endIndex: 5,
+            translation: '我们每天都使用ChatGPT',
+            sentenceEnd: true,
+          },
+        ],
+        corrections: [
+          {
+            startIndex: 2,
+            endIndex: 3,
+            correctedText: 'ChatGPT',
+            confidence: 0.98,
+            category: 'proper-noun',
+          },
+        ],
+        terminology: [{ source: 'ChatGPT', translation: 'ChatGPT' }],
+      }),
+      tokens,
+    );
+
+    expect(result[0]?.originalText).toBe('We use Chat GTT every day.');
+    expect(result[0]?.sourceText).toBe('We use ChatGPT every day.');
+    expect(result[0]?.corrections).toEqual([
+      expect.objectContaining({
+        originalText: 'Chat GTT',
+        correctedText: 'ChatGPT',
+        applied: true,
+      }),
+    ]);
+    expect(result[0]?.terminology).toEqual([{ source: 'ChatGPT', translation: 'ChatGPT' }]);
+  });
+
+  it('records but does not apply a low-confidence correction', () => {
+    const tokens = tokensFor('The speaker said Nova.');
+    const result = parseAiSubtitleOutput(
+      JSON.stringify({
+        units: [{ startIndex: 0, endIndex: 3, translation: '说话者提到了Nova', sentenceEnd: true }],
+        corrections: [
+          {
+            startIndex: 3,
+            endIndex: 3,
+            correctedText: 'Nora',
+            confidence: 0.62,
+            category: 'proper-noun',
+          },
+        ],
+        terminology: [],
+      }),
+      tokens,
+    );
+
+    expect(result[0]?.sourceText).toBe('The speaker said Nova.');
+    expect(result[0]?.corrections?.[0]?.applied).toBe(false);
+  });
+
+  it('ignores model corrections when transcript repair is disabled', () => {
+    const tokens = tokensFor('We use Chat GTT every day.');
+    const result = parseAiSubtitleOutput(
+      JSON.stringify({
+        units: [
+          {
+            startIndex: 0,
+            endIndex: 5,
+            translation: '我们每天都使用ChatGPT',
+            sentenceEnd: true,
+          },
+        ],
+        corrections: [
+          {
+            startIndex: 2,
+            endIndex: 3,
+            correctedText: 'ChatGPT',
+            confidence: 0.99,
+            category: 'proper-noun',
+          },
+        ],
+        terminology: [],
+      }),
+      tokens,
+      false,
+    );
+
+    expect(result[0]?.originalText).toBe('We use Chat GTT every day.');
+    expect(result[0]?.sourceText).toBe('We use Chat GTT every day.');
+    expect(result[0]?.corrections).toEqual([]);
+  });
+
+  it('rejects overlapping correction ranges', () => {
+    const tokens = tokensFor('Chat GTT is useful.');
+    expect(() =>
+      parseAiSubtitleOutput(
+        JSON.stringify({
+          units: [{ startIndex: 0, endIndex: 3, translation: 'ChatGPT很有用', sentenceEnd: true }],
+          corrections: [
+            {
+              startIndex: 0,
+              endIndex: 1,
+              correctedText: 'ChatGPT',
+              confidence: 0.99,
+              category: 'proper-noun',
+            },
+            {
+              startIndex: 1,
+              endIndex: 1,
+              correctedText: 'GPT',
+              confidence: 0.99,
+              category: 'formatting',
+            },
+          ],
+          terminology: [],
+        }),
+        tokens,
+      ),
+    ).toThrow('重叠、乱序或越界');
+  });
+
+  it('rejects a spoken discourse marker stranded at the previous cue boundary', () => {
+    const tokens = tokensFor("A clear response is like hey, we're ready now.");
+    expect(() =>
+      parseAiSubtitleOutput(
+        JSON.stringify({
+          units: [
+            {
+              startIndex: 0,
+              endIndex: 5,
+              translation: '明确的回应就像是说嘿',
+              sentenceEnd: false,
+            },
+            {
+              startIndex: 6,
+              endIndex: 8,
+              translation: '我们已经准备好了',
+              sentenceEnd: true,
+            },
+          ],
+          corrections: [],
+          terminology: [],
+        }),
+        tokens,
+      ),
+    ).toThrow('口语引导词');
+  });
+
   it('includes display constraints and indexed tokens in the prompt', () => {
-    const prompt = buildAiSubtitlePrompt(tokensFor('Hello world.'));
+    const prompt = buildAiSubtitlePrompt(tokensFor('Hello world.'), {
+      videoTitle: 'A ChatGPT interview',
+      terminology: [{ source: 'ChatGPT', translation: 'ChatGPT' }],
+    });
     expect(prompt).toContain('不得出现在 translation 中');
     expect(prompt).toContain('不能仅为了满足字符数硬切');
     expect(prompt).toContain('可以用单个空格表现明显的口语停顿');
     expect(prompt).toContain('不要求每个 unit 自己构成完整句');
     expect(prompt).toContain('不得拆开 AI 等英文词');
+    expect(prompt).toContain('A ChatGPT interview');
+    expect(prompt).toContain('既有术语');
     expect(prompt).not.toContain('36');
     expect(prompt).toContain('{"index":0,"text":"Hello"}');
     expect(prompt).toContain('{"index":1,"text":"world."}');

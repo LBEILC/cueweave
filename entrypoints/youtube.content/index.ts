@@ -8,6 +8,7 @@ import {
   type TokenWindow,
 } from '../../src/domain/subtitle';
 import {
+  CANCEL_TRANSLATION_SESSION_MESSAGE,
   TRANSLATE_WINDOW_MESSAGE,
   TRANSLATION_PROGRESS_MESSAGE,
   type TranslateWindowResult,
@@ -19,14 +20,17 @@ import {
   CAPTION_TRACKS_EVENT,
   GET_CONTENT_SETTINGS_MESSAGE,
   GET_CONTENT_STATE_MESSAGE,
+  GET_TRANSCRIPT_REPORT_MESSAGE,
   SET_CONTENT_ENABLED_MESSAGE,
   SET_SUBTITLE_PREFERENCES_MESSAGE,
+  START_FULL_TRANSLATION_MESSAGE,
   type CaptionTrack,
   type CaptionTrackRequestDetail,
   type CaptionTrackResponseDetail,
   type CaptionTracksEventDetail,
   type ContentState,
   type ContentSettings,
+  type TranscriptReport,
 } from '../../src/platform/youtube/types';
 import {
   isCaptionEventForCurrentVideo,
@@ -39,7 +43,7 @@ import {
 } from '../../src/settings/subtitle';
 
 const OVERLAY_ID = 'cueweave-subtitle-overlay';
-const CONTENT_BUILD_MARKER = 'cache-migration-v1';
+const CONTENT_BUILD_MARKER = 'transcript-intelligence-v1';
 const PREFETCH_WINDOW_COUNT = 3;
 
 type WindowTranslationStatus = 'working' | 'ready' | 'failed';
@@ -77,6 +81,21 @@ let focusedWindowId = '';
 let translationFocusVersion = 0;
 let observedVideo: HTMLVideoElement | undefined;
 let observedLocationVideoId: string | undefined;
+let translationSessionId = crypto.randomUUID();
+let fullTranslationStatus: TranscriptReport['fullTranslationStatus'] = 'idle';
+let fullTranslationMessage = '';
+let fullTranslationJob: Promise<void> | undefined;
+
+function rotateTranslationSession(): void {
+  const previousSessionId = translationSessionId;
+  translationSessionId = crypto.randomUUID();
+  void browser.runtime
+    .sendMessage({
+      type: CANCEL_TRANSLATION_SESSION_MESSAGE,
+      sessionId: previousSessionId,
+    })
+    .catch(() => undefined);
+}
 
 function updateState(patch: Partial<ContentState>): void {
   state = { ...state, ...patch };
@@ -85,6 +104,10 @@ function updateState(patch: Partial<ContentState>): void {
 }
 
 function resetSubtitleSession(videoId?: string, message?: string): void {
+  rotateTranslationSession();
+  fullTranslationStatus = 'idle';
+  fullTranslationMessage = '';
+  fullTranslationJob = undefined;
   subtitleSession += 1;
   loadedTrackKey = '';
   activeRequest?.abort();
@@ -105,6 +128,10 @@ function resetSubtitleSession(videoId?: string, message?: string): void {
     displayCueCount: 0,
     aiStatus: 'idle',
     aiMessage: undefined,
+    correctionCount: 0,
+    translatedWindowCount: 0,
+    totalWindowCount: 0,
+    fullTranslationStatus: 'idle',
     message: videoId ? (message ?? '正在读取新视频的字幕轨。') : undefined,
   });
 }
@@ -342,6 +369,19 @@ function formatTime(timeMs: number): string {
   return `${minutes}:${seconds}`;
 }
 
+function currentVideoContext(): { videoTitle?: string; channelName?: string } {
+  const rawTitle =
+    document.querySelector<HTMLElement>('ytd-watch-metadata h1')?.innerText.trim() ||
+    document.title.replace(/\s+-\s+YouTube$/u, '').trim();
+  const channelName = document
+    .querySelector<HTMLElement>('ytd-watch-metadata ytd-channel-name a')
+    ?.innerText.trim();
+  return {
+    ...(rawTitle ? { videoTitle: rawTitle.slice(0, 200) } : {}),
+    ...(channelName ? { channelName: channelName.slice(0, 120) } : {}),
+  };
+}
+
 function logTranslationEvent(
   event: 'start' | 'promote' | 'progress' | 'success' | 'failure',
   details: Record<string, boolean | number | string | undefined>,
@@ -366,6 +406,99 @@ function mergeTranslatedCues(cues: readonly DisplayCue[]): void {
   const cuesById = new Map(translatedCues.map((cue) => [cue.id, cue]));
   for (const cue of cues) cuesById.set(cue.id, cue);
   translatedCues = [...cuesById.values()].sort((left, right) => left.startMs - right.startMs);
+  updateTranslationMetrics();
+}
+
+function translatedWindowCount(): number {
+  return tokenWindows.filter((window) => windowStates.get(window.id)?.status === 'ready').length;
+}
+
+function uniqueCorrections(): TranscriptReport['corrections'] {
+  return [
+    ...new Map(
+      translatedCues
+        .flatMap((cue) => cue.corrections ?? [])
+        .map((correction) => [correction.id, correction]),
+    ).values(),
+  ].sort((left, right) => left.startMs - right.startMs);
+}
+
+function uniqueTerminology(): TranscriptReport['terminology'] {
+  return [
+    ...new Map(
+      translatedCues
+        .flatMap((cue) => cue.terminology ?? [])
+        .map((term) => [term.source.toLocaleLowerCase(), term]),
+    ).values(),
+  ];
+}
+
+function updateTranslationMetrics(): void {
+  updateState({
+    correctionCount: uniqueCorrections().filter((correction) => correction.applied).length,
+    translatedWindowCount: translatedWindowCount(),
+    totalWindowCount: tokenWindows.length,
+    fullTranslationStatus,
+  });
+}
+
+function transcriptReport(): TranscriptReport {
+  const completedWindows = translatedWindowCount();
+  return {
+    videoId: state.videoId ?? '',
+    videoTitle: currentVideoContext().videoTitle ?? 'YouTube 视频',
+    ...(state.languageCode ? { languageCode: state.languageCode } : {}),
+    originalCues: structuredClone(displayCues),
+    translatedCues: structuredClone(translatedCues),
+    corrections: structuredClone(uniqueCorrections()),
+    terminology: structuredClone(uniqueTerminology()),
+    translatedWindowCount: completedWindows,
+    totalWindowCount: tokenWindows.length,
+    translationComplete: tokenWindows.length > 0 && completedWindows === tokenWindows.length,
+    fullTranslationStatus,
+    ...(fullTranslationMessage ? { message: fullTranslationMessage } : {}),
+  };
+}
+
+async function waitForWindowTranslation(windowId: string): Promise<void> {
+  const deadline = Date.now() + 60_000;
+  while (windowStates.get(windowId)?.status === 'working' && Date.now() < deadline) {
+    await new Promise((resolve) => window.setTimeout(resolve, 250));
+  }
+}
+
+function startFullTranslation(): Promise<void> {
+  if (fullTranslationJob) return fullTranslationJob;
+  const jobSessionId = translationSessionId;
+  fullTranslationStatus = 'working';
+  fullTranslationMessage = '正在准备完整字幕。';
+  updateTranslationMetrics();
+
+  fullTranslationJob = (async () => {
+    for (const window of tokenWindows) {
+      if (jobSessionId !== translationSessionId) {
+        fullTranslationStatus = 'error';
+        fullTranslationMessage = '完整翻译已停止；请重新开始。';
+        updateTranslationMetrics();
+        return;
+      }
+      await translateWindow(window, 0, translationFocusVersion, true);
+      await waitForWindowTranslation(window.id);
+      const completed = translatedWindowCount();
+      fullTranslationMessage = `已完成 ${completed} / ${tokenWindows.length} 个字幕窗口。`;
+      updateTranslationMetrics();
+    }
+    if (jobSessionId !== translationSessionId) return;
+    const complete = translatedWindowCount() === tokenWindows.length && tokenWindows.length > 0;
+    fullTranslationStatus = complete ? 'ready' : 'error';
+    fullTranslationMessage = complete
+      ? '完整字幕已准备好，可以导出。'
+      : '部分字幕窗口未能完成，请检查模型状态后重试。';
+    updateTranslationMetrics();
+  })().finally(() => {
+    fullTranslationJob = undefined;
+  });
+  return fullTranslationJob;
 }
 
 async function translateWindow(
@@ -405,6 +538,7 @@ async function translateWindow(
     }
   }
   const requestSession = subtitleSession;
+  const requestTranslationSessionId = translationSessionId;
 
   if (!promotingPrefetch) windowStates.set(window.id, { status: 'working', priority });
   logTranslationEvent(promotingPrefetch ? 'promote' : 'start', {
@@ -414,6 +548,10 @@ async function translateWindow(
     tokenCount: window.tokens.length,
   });
   const requestStartedAt = performance.now();
+  const previousCues = translatedCues
+    .filter((cue) => cue.endMs < window.startMs)
+    .slice(-6)
+    .map((cue) => ({ sourceText: cue.sourceText, translation: cue.translation }));
   updateState({
     aiStatus: 'working',
     aiMessage:
@@ -430,10 +568,19 @@ async function translateWindow(
         videoId: state.videoId ?? '',
         languageCode: state.languageCode ?? '',
         windowId: window.id,
+        sessionId: requestTranslationSessionId,
+        ...currentVideoContext(),
+        correctionEnabled: subtitlePreferences.transcriptCorrectionEnabled,
       },
       priority,
+      previousCues,
     })) as TranslateWindowResult;
-    if (requestSession !== subtitleSession) return;
+    if (
+      requestSession !== subtitleSession ||
+      requestTranslationSessionId !== translationSessionId
+    ) {
+      return;
+    }
 
     if (!result.ok) {
       windowStates.set(window.id, { status: 'failed', priority, failureCode: result.error.code });
@@ -477,7 +624,12 @@ async function translateWindow(
     }
     continuePrefetch(window, remainingPrefetch, focusVersion);
   } catch {
-    if (requestSession !== subtitleSession) return;
+    if (
+      requestSession !== subtitleSession ||
+      requestTranslationSessionId !== translationSessionId
+    ) {
+      return;
+    }
     windowStates.set(window.id, { status: 'failed', priority, failureCode: 'network' });
     windowRetryAfterMs.set(window.id, Date.now() + 30_000);
     logTranslationEvent('failure', {
@@ -509,6 +661,10 @@ async function ensureTranslatedWindow(timeMs: number, force = false): Promise<vo
 function handleVideoSeeked(event: Event): void {
   const video = event.currentTarget as HTMLVideoElement;
   if (state.enabled && subtitlePreferences.displayMode !== 'source') {
+    rotateTranslationSession();
+    windowStates.forEach((windowState, windowId) => {
+      if (windowState.status === 'working') windowStates.delete(windowId);
+    });
     void ensureTranslatedWindow(video.currentTime * 1_000, true);
   }
 }
@@ -663,6 +819,7 @@ async function loadTrack(detail: CaptionTracksEventDetail): Promise<void> {
 
   const trackKey = `${detail.videoId}:${track.languageCode}:${track.baseUrl}`;
   if (trackKey === loadedTrackKey) return;
+  rotateTranslationSession();
   subtitleSession += 1;
   loadedTrackKey = trackKey;
   activeRequest?.abort();
@@ -692,6 +849,7 @@ async function loadTrack(detail: CaptionTracksEventDetail): Promise<void> {
     sourceTokens = buildSourceTokens(cues);
     displayCues = createLocalDisplayCues(sourceTokens);
     tokenWindows = createTokenWindows(sourceTokens);
+    updateTranslationMetrics();
     updateState({
       status: 'ready',
       cueCount: cues.length,
@@ -783,10 +941,33 @@ export default defineContentScript({
         typeof message === 'object' &&
         message !== null &&
         'type' in message &&
+        message.type === GET_TRANSCRIPT_REPORT_MESSAGE
+      ) {
+        return Promise.resolve(transcriptReport());
+      }
+      if (
+        typeof message === 'object' &&
+        message !== null &&
+        'type' in message &&
+        message.type === START_FULL_TRANSLATION_MESSAGE
+      ) {
+        void startFullTranslation();
+        return Promise.resolve({ ok: true });
+      }
+      if (
+        typeof message === 'object' &&
+        message !== null &&
+        'type' in message &&
         message.type === SET_CONTENT_ENABLED_MESSAGE &&
         'enabled' in message &&
         typeof message.enabled === 'boolean'
       ) {
+        if (!message.enabled) {
+          rotateTranslationSession();
+          windowStates.forEach((windowState, windowId) => {
+            if (windowState.status === 'working') windowStates.delete(windowId);
+          });
+        }
         updateState({ enabled: message.enabled });
         return Promise.resolve({ ok: true });
       }
@@ -797,7 +978,29 @@ export default defineContentScript({
         message.type === SET_SUBTITLE_PREFERENCES_MESSAGE &&
         'preferences' in message
       ) {
-        subtitlePreferences = parseSubtitlePreferences(message.preferences);
+        const nextPreferences = parseSubtitlePreferences(message.preferences);
+        const correctionSettingChanged =
+          subtitlePreferences.transcriptCorrectionEnabled !==
+          nextPreferences.transcriptCorrectionEnabled;
+        const switchingToSource =
+          subtitlePreferences.displayMode !== 'source' && nextPreferences.displayMode === 'source';
+        subtitlePreferences = nextPreferences;
+        if (correctionSettingChanged || switchingToSource) {
+          rotateTranslationSession();
+        }
+        if (switchingToSource) {
+          windowStates.forEach((windowState, windowId) => {
+            if (windowState.status === 'working') windowStates.delete(windowId);
+          });
+        }
+        if (correctionSettingChanged) {
+          translatedCues = [];
+          windowStates.clear();
+          windowRetryAfterMs.clear();
+          fullTranslationStatus = 'idle';
+          fullTranslationMessage = '';
+          updateTranslationMetrics();
+        }
         updateState({ displayMode: subtitlePreferences.displayMode });
         const host = document.getElementById(OVERLAY_ID);
         if (host) applySubtitlePreferences(host);

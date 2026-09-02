@@ -2,6 +2,7 @@ import type { DisplayCue, SourceToken } from '../domain/subtitle';
 import {
   AI_SUBTITLE_SCHEMA,
   AiSubtitleBoundaryError,
+  type AiSubtitleContext,
   buildAiSubtitleBoundaryRepairPrompt,
   buildAiSubtitlePrompt,
   findAiSubtitleReviewIssue,
@@ -83,6 +84,7 @@ async function postChatCompletion(
   settings: ProviderSettings,
   messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>,
   responseFormat?: object,
+  externalSignal?: AbortSignal,
 ): Promise<string> {
   if (!settings.apiKey) {
     throw new ProviderError(
@@ -93,6 +95,9 @@ async function postChatCompletion(
 
   await assertProviderPermission(settings);
   const controller = new AbortController();
+  const abortFromCaller = () => controller.abort();
+  externalSignal?.addEventListener('abort', abortFromCaller, { once: true });
+  if (externalSignal?.aborted) controller.abort();
   const timeoutId = globalThis.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
   try {
@@ -136,11 +141,15 @@ async function postChatCompletion(
   } catch (error) {
     if (error instanceof ProviderError) throw error;
     if (error instanceof DOMException && error.name === 'AbortError') {
+      if (externalSignal?.aborted) {
+        throw new ProviderError('cancelled', '翻译请求已取消。');
+      }
       throw new ProviderError('timeout', '模型服务在 45 秒内没有响应。CueWeave 已保留原文字幕。');
     }
     throw new ProviderError('network', '无法连接模型服务。请检查网络、Base URL 和运行时权限。');
   } finally {
     globalThis.clearTimeout(timeoutId);
+    externalSignal?.removeEventListener('abort', abortFromCaller);
   }
 }
 
@@ -160,6 +169,7 @@ async function postResponse(
   settings: ProviderSettings,
   messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>,
   responseFormat?: object,
+  externalSignal?: AbortSignal,
 ): Promise<string> {
   if (!settings.apiKey) {
     throw new ProviderError(
@@ -170,6 +180,9 @@ async function postResponse(
 
   await assertProviderPermission(settings);
   const controller = new AbortController();
+  const abortFromCaller = () => controller.abort();
+  externalSignal?.addEventListener('abort', abortFromCaller, { once: true });
+  if (externalSignal?.aborted) controller.abort();
   const timeoutId = globalThis.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
   try {
@@ -224,11 +237,15 @@ async function postResponse(
   } catch (error) {
     if (error instanceof ProviderError) throw error;
     if (error instanceof DOMException && error.name === 'AbortError') {
+      if (externalSignal?.aborted) {
+        throw new ProviderError('cancelled', '翻译请求已取消。');
+      }
       throw new ProviderError('timeout', '模型服务在 45 秒内没有响应。CueWeave 已保留原文字幕。');
     }
     throw new ProviderError('network', '无法连接模型服务。请检查网络、Base URL 和运行时权限。');
   } finally {
     globalThis.clearTimeout(timeoutId);
+    externalSignal?.removeEventListener('abort', abortFromCaller);
   }
 }
 
@@ -236,11 +253,12 @@ async function postProviderResponse(
   settings: ProviderSettings,
   messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>,
   responseFormat?: object,
+  signal?: AbortSignal,
 ): Promise<string> {
   const postByProtocol = (protocol: Exclude<ProviderProtocol, 'auto'>) =>
     protocol === 'responses'
-      ? postResponse(settings, messages, responseFormat)
-      : postChatCompletion(settings, messages, responseFormat);
+      ? postResponse(settings, messages, responseFormat, signal)
+      : postChatCompletion(settings, messages, responseFormat, signal);
 
   if (settings.protocol !== 'auto') return postByProtocol(settings.protocol);
 
@@ -261,10 +279,13 @@ export async function translateTokenWindow(
   settings: ProviderSettings,
   tokens: readonly SourceToken[],
   onProgress?: (stage: TranslationProgressStage) => void,
+  signal?: AbortSignal,
+  context: AiSubtitleContext = {},
 ): Promise<DisplayCue[]> {
+  const correctionEnabled = context.correctionEnabled !== false;
   const messages = [
     SYSTEM_MESSAGE,
-    { role: 'user' as const, content: buildAiSubtitlePrompt(tokens) },
+    { role: 'user' as const, content: buildAiSubtitlePrompt(tokens, context) },
   ];
   const responseFormat = {
     type: 'json_schema',
@@ -303,6 +324,7 @@ export async function translateTokenWindow(
           },
         ],
         responseFormat,
+        signal,
       );
 
       try {
@@ -312,7 +334,7 @@ export async function translateTokenWindow(
           boundaryError,
         );
         mergedContent = candidateContent;
-        return parseAiSubtitleOutput(candidateContent, tokens);
+        return parseAiSubtitleOutput(candidateContent, tokens, correctionEnabled);
       } catch (error) {
         lastError = error;
         if (error instanceof AiSubtitleBoundaryError) boundaryError = error;
@@ -320,18 +342,18 @@ export async function translateTokenWindow(
     }
 
     try {
-      return parseAiSubtitleFallbackOutput(mergedContent, tokens);
+      return parseAiSubtitleFallbackOutput(mergedContent, tokens, correctionEnabled);
     } catch {
       throw invalidResponseError(lastError);
     }
   };
 
   onProgress?.('translating');
-  let content = await postProviderResponse(settings, messages, responseFormat);
+  let content = await postProviderResponse(settings, messages, responseFormat, signal);
   let lastError: unknown;
 
   try {
-    const cues = parseAiSubtitleOutput(content, tokens);
+    const cues = parseAiSubtitleOutput(content, tokens, correctionEnabled);
     const reviewIssue = findAiSubtitleReviewIssue(cues);
     if (reviewIssue) throw new Error(reviewIssue);
     return cues;
@@ -354,10 +376,11 @@ export async function translateTokenWindow(
       },
     ],
     responseFormat,
+    signal,
   );
 
   try {
-    return parseAiSubtitleOutput(content, tokens);
+    return parseAiSubtitleOutput(content, tokens, correctionEnabled);
   } catch (error) {
     if (error instanceof AiSubtitleBoundaryError) {
       return repairBoundaryUnits(content, error);

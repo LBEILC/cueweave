@@ -377,6 +377,26 @@ describe('Chat Completions provider', () => {
     });
   });
 
+  it('aborts an in-flight model request when its playback session is cancelled', async () => {
+    const fetchMock = vi.fn((_url: string, init?: RequestInit) => {
+      const signal = init?.signal;
+      return new Promise<Response>((_resolve, reject) => {
+        const abort = () => reject(new DOMException('Cancelled', 'AbortError'));
+        if (signal?.aborted) abort();
+        else signal?.addEventListener('abort', abort, { once: true });
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('browser', { permissions: { contains: vi.fn().mockResolvedValue(true) } });
+    const controller = new AbortController();
+
+    const request = translateTokenWindow(settings, tokens, undefined, controller.signal);
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
+    controller.abort();
+
+    await expect(request).rejects.toMatchObject({ code: 'cancelled' });
+  });
+
   it('uses the Responses endpoint when configured', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(

@@ -38,4 +38,43 @@ describe('real subtitle model integration', () => {
     },
     120_000,
   );
+
+  it.runIf(Boolean(apiKey))(
+    'repairs a context-supported product-name transcription error',
+    async () => {
+      vi.stubGlobal('browser', { permissions: { contains: vi.fn().mockResolvedValue(true) } });
+      const correctionTokens = 'We use Chat GTT to help people write and reason every day.'
+        .split(' ')
+        .map((text, index) => ({
+          id: `correction-${index}`,
+          cueId: 'correction-cue',
+          startMs: index * 240,
+          endMs: (index + 1) * 240,
+          text,
+        }));
+
+      const cues = await translateTokenWindow(
+        {
+          baseUrl: 'https://api.gpt.ge/v1',
+          apiKey,
+          model: 'gemini-3.1-flash-lite',
+          protocol: 'chat-completions',
+        },
+        correctionTokens,
+        undefined,
+        undefined,
+        { videoTitle: 'How people use ChatGPT every day' },
+      );
+
+      expect(cues.map((cue) => cue.sourceText).join(' ')).toContain('ChatGPT');
+      expect(cues.flatMap((cue) => cue.corrections ?? [])).toEqual([
+        expect.objectContaining({
+          originalText: 'Chat GTT',
+          correctedText: 'ChatGPT',
+          applied: true,
+        }),
+      ]);
+    },
+    120_000,
+  );
 });

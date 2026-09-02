@@ -4,6 +4,7 @@ export type ProviderErrorCode =
   | 'authentication'
   | 'model-not-found'
   | 'rate-limited'
+  | 'cancelled'
   | 'timeout'
   | 'network'
   | 'invalid-response';

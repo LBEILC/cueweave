@@ -4,6 +4,7 @@ export type BilingualOrder = 'translation-first' | 'source-first';
 export interface SubtitlePreferences {
   displayMode: SubtitleDisplayMode;
   bilingualOrder: BilingualOrder;
+  transcriptCorrectionEnabled: boolean;
   positionPercent: number;
   sizePercent: number;
   backgroundEnabled: boolean;
@@ -15,6 +16,7 @@ export const SUBTITLE_PREFERENCES_KEY = 'cueweave.subtitle-preferences';
 export const DEFAULT_SUBTITLE_PREFERENCES: Readonly<SubtitlePreferences> = {
   displayMode: 'bilingual',
   bilingualOrder: 'translation-first',
+  transcriptCorrectionEnabled: true,
   positionPercent: 9,
   sizePercent: 100,
   backgroundEnabled: true,
@@ -37,6 +39,10 @@ export function parseSubtitlePreferences(value: unknown): SubtitlePreferences {
         ? record.displayMode
         : 'bilingual',
     bilingualOrder: record.bilingualOrder === 'source-first' ? 'source-first' : 'translation-first',
+    transcriptCorrectionEnabled:
+      typeof record.transcriptCorrectionEnabled === 'boolean'
+        ? record.transcriptCorrectionEnabled
+        : DEFAULT_SUBTITLE_PREFERENCES.transcriptCorrectionEnabled,
     positionPercent: clampNumber(
       record.positionPercent,
       DEFAULT_SUBTITLE_PREFERENCES.positionPercent,

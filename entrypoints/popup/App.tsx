@@ -2,6 +2,7 @@ import {
   CheckCircleIcon,
   CircleNotchIcon,
   GearSixIcon,
+  MagicWandIcon,
   PowerIcon,
   ShieldCheckIcon,
   SubtitlesIcon,
@@ -340,14 +341,32 @@ export function App() {
           <ShieldCheckIcon size={16} weight="regular" aria-hidden="true" />
           <span>本地校验 · MiSans</span>
         </span>
-        <button
-          className="settings-link"
-          type="button"
-          onClick={() => void browser.tabs.create({ url: browser.runtime.getURL('/options.html') })}
-        >
-          <GearSixIcon size={16} aria-hidden="true" />
-          <span>模型设置</span>
-        </button>
+        <span className="footer-actions">
+          <button
+            className="settings-link"
+            type="button"
+            disabled={view.tabId === undefined || !view.content?.videoId}
+            onClick={() => {
+              if (view.tabId === undefined) return;
+              const reviewUrl = new URL(browser.runtime.getURL('/review.html'));
+              reviewUrl.searchParams.set('tabId', String(view.tabId));
+              void browser.tabs.create({ url: reviewUrl.toString() });
+            }}
+          >
+            <MagicWandIcon size={16} aria-hidden="true" />
+            <span>字幕工具</span>
+          </button>
+          <button
+            className="settings-link"
+            type="button"
+            onClick={() =>
+              void browser.tabs.create({ url: browser.runtime.getURL('/options.html') })
+            }
+          >
+            <GearSixIcon size={16} aria-hidden="true" />
+            <span>设置</span>
+          </button>
+        </span>
       </footer>
     </main>
   );
