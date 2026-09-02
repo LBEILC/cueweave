@@ -13,6 +13,8 @@ interface AiSubtitleOutput {
 
 export interface AiSubtitleBoundaryIssue {
   unitIndex: number;
+  replaceStartUnitIndex: number;
+  replaceEndUnitIndex: number;
   startIndex: number;
   endIndex: number;
   translation: string;
@@ -40,10 +42,9 @@ const MAX_TRANSLATION_CHARACTERS = 96;
 const SOFT_REVIEW_TRANSLATION_CHARACTERS = 30;
 const MIN_PUNCTUATION_CHUNK_CHARACTERS = 4;
 const HIDDEN_TRANSLATION_BOUNDARY = /[，。；：,.;:]+/u;
-const HAN_WHITESPACE_BOUNDARY = /\p{Script=Han}\s+\p{Script=Han}/u;
 
-export const AI_PROMPT_VERSION = 'prompt-v6';
-export const DISPLAY_SEGMENTATION_VERSION = 'display-v6';
+export const AI_PROMPT_VERSION = 'prompt-v7';
+export const DISPLAY_SEGMENTATION_VERSION = 'display-v7';
 
 export const AI_SUBTITLE_SCHEMA = {
   type: 'object',
@@ -134,12 +135,7 @@ function tokenText(tokens: readonly SourceToken[]): string {
 }
 
 function normalizeTranslation(value: string, cleanBoundaryMarkers = false): string {
-  const trimmed = cleanBoundaryMarkers ? value.trim().replace(/\s+/gu, '') : value.trim();
-  if (HAN_WHITESPACE_BOUNDARY.test(trimmed)) {
-    throw new TranslationBoundaryError(
-      '模型在一条中文字幕中使用空格代替了语义分段，请按对应英文词元范围返回多个 unit。',
-    );
-  }
+  const trimmed = value.trim().replace(/\s+/gu, ' ');
 
   const punctuationParts = trimmed
     .split(HIDDEN_TRANSLATION_BOUNDARY)
@@ -177,7 +173,7 @@ export function buildAiSubtitlePrompt(tokens: readonly SourceToken[]): string {
     '3. 不返回、复述或改写英文原文；CueWeave 会根据索引在本地重建原文。',
     '4. translation 使用自然简体中文，优先 10–20 个字符；无法在自然语义边界拆分时可以更长，不能仅为了满足字符数硬切。',
     '5. 中文逗号、句号、分号、冒号及其英文对应符号只代表分句边界，不得出现在 translation 中；遇到这些边界应返回多个 unit。顿号、问号和感叹号可以保留。',
-    '6. translation 不得使用空格、换行或其他排版符号代替分句；需要停顿或换段时，必须在对应英文词元边界返回多个 unit。',
+    '6. translation 可以用单个空格表现明显的口语停顿，但空格不是 unit 边界；需要改变字幕时间范围时，必须在对应英文词元边界返回多个 unit。不得使用换行或重复空格。',
     '7. 从句、转折、让步、递进、补充说明和自然呼吸点都可以成为 unit 边界，不要求每个 unit 自己构成完整句；不得拆开 AI 等英文词、专有名词或数字。',
     '8. 每个 translation 必须只翻译自己覆盖的英文词元，不得把相邻 unit 的语义提前或延后。',
     '9. sentenceEnd 只在一个完整句子结束时为 true。',
@@ -218,8 +214,8 @@ export function buildAiSubtitleBoundaryRepairPrompt(
     '每个问题 unit 已确认包含多个语义边界，这次必须拆成至少两个 unit。',
     '返回的 unit 只能覆盖各自 targetTokens 的全局索引范围；每个范围必须连续、完整覆盖且仅覆盖一次。',
     'contextBefore 和 contextAfter 只用于理解上下文，不得覆盖或翻译。',
-    'translation 不得使用中文逗号、句号、分号、冒号、空格或换行模拟分句。',
-    '输出前逐条检查 translation：任何空格都不合格；如果仍想使用空格或分句标点，必须继续在对应英文词元边界拆分。',
+    'translation 不得使用中文逗号、句号、分号、冒号或换行模拟分句。可以用单个空格表现口语停顿，但不得把空格当作词元范围边界。',
+    '输出前逐条检查 translation：如果仍想使用分句标点，必须继续在对应英文词元边界拆分。',
     '根据语义判断每个 replacement 的 sentenceEnd；中间 replacement 只有在完整句确实结束时才为 true，最后一个必须继承原 unit 的值。',
     '不按字符数机械切分；根据从句、转折、让步、递进、补充说明和自然呼吸点确定准确的英文词元边界。',
     '只返回 JSON，不解释，不使用 Markdown。',
@@ -252,11 +248,13 @@ export function mergeAiSubtitleBoundaryRepair(
   let assignedRepairUnits = 0;
 
   for (const issue of error.issues) {
-    const originalUnit = original.units[issue.unitIndex];
+    const originalUnit = original.units[issue.replaceStartUnitIndex];
+    const originalLastUnit = original.units[issue.replaceEndUnitIndex];
     if (
       !originalUnit ||
+      !originalLastUnit ||
       originalUnit.startIndex !== issue.startIndex ||
-      originalUnit.endIndex !== issue.endIndex
+      originalLastUnit.endIndex !== issue.endIndex
     ) {
       throw new Error('待修复 unit 与原始模型结果不一致。');
     }
@@ -281,7 +279,14 @@ export function mergeAiSubtitleBoundaryRepair(
     if (units.at(-1)?.sentenceEnd !== issue.sentenceEnd) {
       throw new Error('模型修复后改变了原 unit 的句末边界。');
     }
-    replacements.set(issue.unitIndex, units);
+    replacements.set(issue.replaceStartUnitIndex, units);
+    for (
+      let unitIndex = issue.replaceStartUnitIndex + 1;
+      unitIndex <= issue.replaceEndUnitIndex;
+      unitIndex += 1
+    ) {
+      replacements.set(unitIndex, []);
+    }
     assignedRepairUnits += units.length;
   }
 
@@ -338,6 +343,8 @@ function parseAiSubtitleOutputInternal(
       if (!(error instanceof TranslationBoundaryError)) throw error;
       boundaryIssues.push({
         unitIndex,
+        replaceStartUnitIndex: unitIndex,
+        replaceEndUnitIndex: unitIndex,
         startIndex: unit.startIndex,
         endIndex: unit.endIndex,
         translation: unit.translation,
@@ -368,7 +375,52 @@ function parseAiSubtitleOutputInternal(
   if (expectedStart !== tokens.length) {
     throw new Error('模型没有覆盖窗口中的全部词元。');
   }
-  if (boundaryIssues.length > 0) throw new AiSubtitleBoundaryError(boundaryIssues);
+  if (boundaryIssues.length > 0) {
+    const expandedRanges = boundaryIssues
+      .map((issue) => ({
+        startUnitIndex: Math.max(0, issue.unitIndex - 1),
+        endUnitIndex: Math.min(output.units.length - 1, issue.unitIndex + 1),
+        reasons: [issue.reason],
+        problemUnitIndex: issue.unitIndex,
+      }))
+      .sort((left, right) => left.startUnitIndex - right.startUnitIndex)
+      .reduce<
+        Array<{
+          startUnitIndex: number;
+          endUnitIndex: number;
+          reasons: string[];
+          problemUnitIndex: number;
+        }>
+      >((ranges, range) => {
+        const previous = ranges.at(-1);
+        if (previous && range.startUnitIndex <= previous.endUnitIndex) {
+          previous.endUnitIndex = Math.max(previous.endUnitIndex, range.endUnitIndex);
+          previous.reasons.push(...range.reasons);
+        } else {
+          ranges.push(range);
+        }
+        return ranges;
+      }, []);
+    throw new AiSubtitleBoundaryError(
+      expandedRanges.map((range) => {
+        const firstUnit = output.units[range.startUnitIndex]!;
+        const lastUnit = output.units[range.endUnitIndex]!;
+        return {
+          unitIndex: range.problemUnitIndex,
+          replaceStartUnitIndex: range.startUnitIndex,
+          replaceEndUnitIndex: range.endUnitIndex,
+          startIndex: firstUnit.startIndex,
+          endIndex: lastUnit.endIndex,
+          translation: output.units
+            .slice(range.startUnitIndex, range.endUnitIndex + 1)
+            .map((unit) => unit.translation)
+            .join(' / '),
+          sentenceEnd: lastUnit.sentenceEnd,
+          reason: [...new Set(range.reasons)].join(' '),
+        };
+      }),
+    );
+  }
 
   return displayCues;
 }

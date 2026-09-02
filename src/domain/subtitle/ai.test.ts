@@ -149,26 +149,25 @@ describe('AI subtitle output', () => {
     ]);
   });
 
-  it('rejects Chinese whitespace used as a substitute for semantic units', () => {
+  it('preserves one Chinese whitespace as a spoken pause', () => {
     const tokens = tokensFor(
       'We reviewed many samples and found unexpected behavior even though it looked fine alone.',
     );
+    const result = parseAiSubtitleOutput(
+      JSON.stringify({
+        units: [
+          {
+            startIndex: 0,
+            endIndex: tokens.length - 1,
+            translation: '我们阅读了大量样本后发现 这种行为不符合预期',
+            sentenceEnd: true,
+          },
+        ],
+      }),
+      tokens,
+    );
 
-    expect(() =>
-      parseAiSubtitleOutput(
-        JSON.stringify({
-          units: [
-            {
-              startIndex: 0,
-              endIndex: tokens.length - 1,
-              translation: '我们阅读了大量样本后发现 某些行为不符合预期 尽管单独看起来没有问题',
-              sentenceEnd: true,
-            },
-          ],
-        }),
-        tokens,
-      ),
-    ).toThrow('使用空格代替了语义分段');
+    expect(result[0]?.translation).toBe('我们阅读了大量样本后发现 这种行为不符合预期');
   });
 
   it('can clean display separators without inventing new token boundaries', () => {
@@ -192,7 +191,7 @@ describe('AI subtitle output', () => {
     expect(result[0]?.sourceTokenIds).toEqual(tokens.map((token) => token.id));
   });
 
-  it('repairs only the rejected unit and preserves surrounding model output', () => {
+  it('repairs a rejected boundary together with its adjacent units', () => {
     const tokens = tokensFor(
       'First thought. And I think a clear eyed sober response is better. Final thought.',
     );
@@ -226,8 +225,10 @@ describe('AI subtitle output', () => {
       originalContent,
       JSON.stringify({
         units: [
+          { startIndex: 0, endIndex: 1, translation: '第一个观点', sentenceEnd: true },
           { startIndex: 2, endIndex: 7, translation: '我认为应该保持清醒', sentenceEnd: false },
           { startIndex: 8, endIndex: 11, translation: '作出稳健回应会更好', sentenceEnd: true },
+          { startIndex: 12, endIndex: 13, translation: '最后一个观点', sentenceEnd: true },
         ],
       }),
       tokens,
@@ -339,7 +340,7 @@ describe('AI subtitle output', () => {
     const prompt = buildAiSubtitlePrompt(tokensFor('Hello world.'));
     expect(prompt).toContain('不得出现在 translation 中');
     expect(prompt).toContain('不能仅为了满足字符数硬切');
-    expect(prompt).toContain('不得使用空格、换行');
+    expect(prompt).toContain('可以用单个空格表现明显的口语停顿');
     expect(prompt).toContain('不要求每个 unit 自己构成完整句');
     expect(prompt).toContain('不得拆开 AI 等英文词');
     expect(prompt).not.toContain('36');

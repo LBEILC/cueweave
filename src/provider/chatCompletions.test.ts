@@ -91,7 +91,7 @@ describe('Chat Completions provider', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
-  it('asks the model to replace whitespace-separated clauses with exact semantic units', async () => {
+  it('asks the model to replace punctuation-separated clauses with exact semantic units', async () => {
     const longTokens =
       'We reviewed many samples and found this behavior was unexpected even though it looked fine alone.'
         .split(' ')
@@ -110,7 +110,7 @@ describe('Chat Completions provider', () => {
             {
               startIndex: 0,
               endIndex: 15,
-              translation: '我们阅读了大量样本后发现 这种行为与预期不一致 尽管单独看来没有问题',
+              translation: '我们阅读了大量样本后发现，这种行为与预期不一致，尽管单独看来没有问题',
               sentenceEnd: true,
             },
           ],
@@ -162,13 +162,13 @@ describe('Chat Completions provider', () => {
     ) as { messages: Array<{ role: string; content: string }> };
     expect(repairRequest.messages).toHaveLength(2);
     expect(repairRequest.messages.at(-1)?.content).toContain('不按字符数机械切分');
-    expect(repairRequest.messages.at(-1)?.content).toContain('空格');
+    expect(repairRequest.messages.at(-1)?.content).toContain('分句标点');
     expect(repairRequest.messages.at(-1)?.content).toContain('targetTokens');
     expect(repairRequest.messages.map((message) => message.role)).toEqual(['system', 'user']);
     expect(progress).toEqual(['translating', 'repairing-boundaries']);
   });
 
-  it('keeps refining only the smaller unit when the first boundary repair is still invalid', async () => {
+  it('reconsiders adjacent units when the first boundary repair is still invalid', async () => {
     const recursiveTokens = 'And I think a kind of cleareyed sober response where it is like hey.'
       .split(' ')
       .map((text, index) => ({
@@ -204,7 +204,7 @@ describe('Chat Completions provider', () => {
             {
               startIndex: 8,
               endIndex: 13,
-              translation: '回应就像是 嘿',
+              translation: '回应就像是，接着说嘿',
               sentenceEnd: true,
             },
           ],
@@ -213,6 +213,12 @@ describe('Chat Completions provider', () => {
       .mockResolvedValueOnce(
         completion({
           units: [
+            {
+              startIndex: 0,
+              endIndex: 7,
+              translation: '我认为应该保持清醒理智',
+              sentenceEnd: false,
+            },
             {
               startIndex: 8,
               endIndex: 11,
@@ -245,8 +251,10 @@ describe('Chat Completions provider', () => {
     const lastRequest = JSON.parse(
       String((fetchMock.mock.calls[2]?.[1] as RequestInit | undefined)?.body),
     ) as { messages: Array<{ content: string }> };
-    expect(lastRequest.messages.at(-1)?.content).toContain('"startIndex":8');
-    expect(lastRequest.messages.at(-1)?.content).toContain('"currentTranslation":"回应就像是 嘿"');
+    expect(lastRequest.messages.at(-1)?.content).toContain('"startIndex":0');
+    expect(lastRequest.messages.at(-1)?.content).toContain(
+      '"currentTranslation":"我认为应该保持清醒理智 / 回应就像是，接着说嘿"',
+    );
     expect(progress).toEqual(['translating', 'repairing-boundaries', 'repairing-boundaries']);
   });
 
@@ -282,13 +290,19 @@ describe('Chat Completions provider', () => {
           {
             startIndex: 8,
             endIndex: 13,
-            translation: '回应就像是 嘿',
+            translation: '回应就像是，接着说嘿',
             sentenceEnd: true,
           },
         ],
       },
       {
         units: [
+          {
+            startIndex: 0,
+            endIndex: 7,
+            translation: '我认为应该保持清醒理智',
+            sentenceEnd: false,
+          },
           {
             startIndex: 8,
             endIndex: 10,
@@ -298,15 +312,16 @@ describe('Chat Completions provider', () => {
           {
             startIndex: 11,
             endIndex: 13,
-            translation: '这样 说嘿',
+            translation: '这样来说，接着说嘿',
             sentenceEnd: true,
           },
         ],
       },
       {
         units: [
+          { startIndex: 8, endIndex: 10, translation: '回应就像', sentenceEnd: false },
           { startIndex: 11, endIndex: 11, translation: '这', sentenceEnd: false },
-          { startIndex: 12, endIndex: 13, translation: '样 说嘿', sentenceEnd: true },
+          { startIndex: 12, endIndex: 13, translation: '这样来说，接着说嘿', sentenceEnd: true },
         ],
       },
     ];
@@ -328,7 +343,7 @@ describe('Chat Completions provider', () => {
       '我认为应该保持清醒理智',
       '回应就像',
       '这',
-      '样说嘿',
+      '这样来说接着说嘿',
     ]);
     expect(result.flatMap((cue) => cue.sourceTokenIds)).toEqual(
       fallbackTokens.map((token) => token.id),

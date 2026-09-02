@@ -32,6 +32,24 @@ npm run check
 npm test
 ```
 
+## YouTube 字幕测试夹具
+
+下载完整 JSON3 字幕轨并生成指定时间段的回归测试片段：
+
+```bash
+npm run fixture:youtube -- <video-id> [language] [from-ms] [to-ms]
+```
+
+完整字幕写入 `.fixtures/youtube`，仅供本地诊断且不提交 Git；指定时间段写入 `test/fixtures/youtube`，用于可重复的单元测试。脚本通过视频公开页面取得字幕轨，不读取浏览器 Cookie。默认语言为 `en`，默认时间段为 `330000–380000` 毫秒。
+
+默认测试不会调用外部模型。需要用真实 Provider 验证已提交的字幕片段时，在当前终端设置 `CUEWEAVE_LLM_TOKEN`，再运行：
+
+```bash
+npx vitest run src/provider/real-world.integration.test.ts
+```
+
+该测试只从环境变量读取密钥，并断言真实词元的跨边界归属；未设置环境变量时自动跳过。
+
 ## 加载未打包扩展
 
 1. 运行 `npm run build`。

@@ -23,3 +23,6 @@ Thumbs.db
 *.log
 *.tmp
 *.swp
+
+# Downloaded subtitle fixtures
+.fixtures/
