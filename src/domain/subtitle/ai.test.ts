@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildAiSubtitlePrompt, parseAiSubtitleOutput } from './ai';
+import { buildAiSubtitlePrompt, findAiSubtitleReviewIssue, parseAiSubtitleOutput } from './ai';
 import type { SourceToken } from './types';
 
 function tokensFor(text: string): SourceToken[] {
@@ -141,6 +141,28 @@ describe('AI subtitle output', () => {
     ]);
   });
 
+  it('rejects Chinese whitespace used as a substitute for semantic units', () => {
+    const tokens = tokensFor(
+      'We reviewed many samples and found unexpected behavior even though it looked fine alone.',
+    );
+
+    expect(() =>
+      parseAiSubtitleOutput(
+        JSON.stringify({
+          units: [
+            {
+              startIndex: 0,
+              endIndex: tokens.length - 1,
+              translation: '我们阅读了大量样本后发现 某些行为不符合预期 尽管单独看起来没有问题',
+              sentenceEnd: true,
+            },
+          ],
+        }),
+        tokens,
+      ),
+    ).toThrow('使用空格代替了语义分段');
+  });
+
   it('keeps a longer translation intact when it has no natural boundary', () => {
     const tokens = tokensFor('A complete phrase should stay together for readability.');
     const translation = '这段完整而连续的表达为了可读性应该保持在一起';
@@ -160,6 +182,31 @@ describe('AI subtitle output', () => {
 
     expect(result).toHaveLength(1);
     expect(result[0]?.translation).toBe(translation);
+  });
+
+  it('marks an unusually long initial unit for semantic review without splitting it', () => {
+    const tokens = tokensFor(
+      'This complete expression remains meaningful only when all of its details are considered together.',
+    );
+    const translation =
+      '这段表达只有在所有细节都被完整结合起来考虑时才能保持原本准确且不可分割的含义';
+    const result = parseAiSubtitleOutput(
+      JSON.stringify({
+        units: [
+          {
+            startIndex: 0,
+            endIndex: tokens.length - 1,
+            translation,
+            sentenceEnd: true,
+          },
+        ],
+      }),
+      tokens,
+    );
+
+    expect(result).toHaveLength(1);
+    expect(result[0]?.translation).toBe(translation);
+    expect(findAiSubtitleReviewIssue(result)).toContain('语义复审');
   });
 
   it('never splits an English term or proportionally remaps its source tokens', () => {
@@ -212,6 +259,8 @@ describe('AI subtitle output', () => {
     const prompt = buildAiSubtitlePrompt(tokensFor('Hello world.'));
     expect(prompt).toContain('不得出现在 translation 中');
     expect(prompt).toContain('不能仅为了满足字符数硬切');
+    expect(prompt).toContain('不得使用空格、换行');
+    expect(prompt).toContain('不要求每个 unit 自己构成完整句');
     expect(prompt).toContain('不得拆开 AI 等英文词');
     expect(prompt).not.toContain('36');
     expect(prompt).toContain('{"index":0,"text":"Hello"}');

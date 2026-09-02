@@ -91,6 +91,76 @@ describe('Chat Completions provider', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it('asks the model to replace whitespace-separated clauses with exact semantic units', async () => {
+    const longTokens =
+      'We reviewed many samples and found this behavior was unexpected even though it looked fine alone.'
+        .split(' ')
+        .map((text, index) => ({
+          id: `long-${index}`,
+          cueId: 'long-cue',
+          startMs: index * 200,
+          endMs: (index + 1) * 200,
+          text,
+        }));
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        completion({
+          units: [
+            {
+              startIndex: 0,
+              endIndex: 15,
+              translation: '我们阅读了大量样本后发现 这种行为与预期不一致 尽管单独看来没有问题',
+              sentenceEnd: true,
+            },
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(
+        completion({
+          units: [
+            {
+              startIndex: 0,
+              endIndex: 5,
+              translation: '我们阅读大量样本后发现',
+              sentenceEnd: false,
+            },
+            {
+              startIndex: 6,
+              endIndex: 9,
+              translation: '这种行为与预期不一致',
+              sentenceEnd: false,
+            },
+            {
+              startIndex: 10,
+              endIndex: 15,
+              translation: '尽管单独看来没有问题',
+              sentenceEnd: true,
+            },
+          ],
+        }),
+      );
+    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('browser', { permissions: { contains: vi.fn().mockResolvedValue(true) } });
+
+    const result = await translateTokenWindow(settings, longTokens);
+
+    expect(result.map((cue) => cue.translation)).toEqual([
+      '我们阅读大量样本后发现',
+      '这种行为与预期不一致',
+      '尽管单独看来没有问题',
+    ]);
+    expect(result.flatMap((cue) => cue.sourceTokenIds)).toEqual(
+      longTokens.map((token) => token.id),
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const repairRequest = JSON.parse(
+      String((fetchMock.mock.calls[1]?.[1] as RequestInit | undefined)?.body),
+    ) as { messages: Array<{ content: string }> };
+    expect(repairRequest.messages.at(-1)?.content).toContain('不要根据字符数机械切分');
+    expect(repairRequest.messages.at(-1)?.content).toContain('空格');
+  });
+
   it('reports missing runtime permission before sending a request', async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);

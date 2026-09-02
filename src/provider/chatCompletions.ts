@@ -2,6 +2,7 @@ import type { DisplayCue, SourceToken } from '../domain/subtitle';
 import {
   AI_SUBTITLE_SCHEMA,
   buildAiSubtitlePrompt,
+  findAiSubtitleReviewIssue,
   parseAiSubtitleOutput,
 } from '../domain/subtitle/ai';
 import { providerOriginPattern } from './settings';
@@ -278,13 +279,16 @@ export async function translateTokenWindow(
             { role: 'assistant' as const, content: invalidContent },
             {
               role: 'user' as const,
-              content: `上一次结果未通过完整性校验：${lastError instanceof Error ? lastError.message : '未知结构错误'} 请重新返回全部词元，确保每个 unit 的 startIndex 紧接前一个 endIndex，索引连续、无遗漏、无重复。translation 优先保持完整语义，不能仅为了字符数硬切；只有存在完整句、从句或可独立阅读的短语边界时才拆分，并为每个 unit 分配语义准确的连续英文词元范围。禁止拆开英文词、专有名词或数字，禁止为两条 translation 重复同一 source 范围。`,
+              content: `上一次结果需要修正：${lastError instanceof Error ? lastError.message : '未知结构错误'} 请重新返回全部词元，确保每个 unit 的 startIndex 紧接前一个 endIndex，索引连续、无遗漏、无重复。不要根据字符数机械切分，也不要只删除原译文中的空格后保留同一个 unit。如果空格、标点或明显停顿代表不同意群，请在语义准确的英文词元边界拆成多个 unit。从句、转折、让步、递进、补充说明和自然呼吸点都可以单独显示，不要求每个 unit 自己构成完整句。如果仔细复审后确实没有自然边界，可以保留较长 unit，但不得用空格或换行模拟分句。禁止拆开英文词、专有名词或数字，禁止为两条 translation 重复同一 source 范围。`,
             },
           ],
       responseFormat,
     );
     try {
-      return parseAiSubtitleOutput(content, tokens);
+      const cues = parseAiSubtitleOutput(content, tokens);
+      const reviewIssue = attempt === 0 ? findAiSubtitleReviewIssue(cues) : undefined;
+      if (reviewIssue) throw new Error(reviewIssue);
+      return cues;
     } catch (error) {
       lastError = error;
       invalidContent = content;
