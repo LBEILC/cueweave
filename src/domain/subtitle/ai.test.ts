@@ -376,6 +376,61 @@ describe('AI subtitle output', () => {
     expect(result[0]?.terminology).toEqual([{ source: 'ChatGPT', translation: 'ChatGPT' }]);
   });
 
+  it('atomically applies a verified video entity alias even when the window omits corrections', () => {
+    const tokens = tokensFor('I think that CHBT is using up all the water.');
+    const result = parseAiSubtitleOutput(
+      JSON.stringify({
+        units: [
+          {
+            startIndex: 0,
+            endIndex: tokens.length - 1,
+            translation: '我认为ChatGPT正在耗尽全世界的水资源',
+            sentenceEnd: true,
+          },
+        ],
+        corrections: [],
+        terminology: [],
+      }),
+      tokens,
+      true,
+      { entityAliases: [{ source: 'CHBT', translation: 'ChatGPT' }] },
+    );
+
+    expect(result[0]?.originalText).toBe('I think that CHBT is using up all the water.');
+    expect(result[0]?.sourceText).toBe('I think that ChatGPT is using up all the water.');
+    expect(result[0]?.corrections).toEqual([
+      expect.objectContaining({
+        originalText: 'CHBT',
+        correctedText: 'ChatGPT',
+        confidence: 1,
+        applied: true,
+      }),
+    ]);
+  });
+
+  it('matches a spaced verified alias against the compact ASR form', () => {
+    const tokens = tokensFor('I stopped using chatgbt for those questions.');
+    const result = parseAiSubtitleOutput(
+      JSON.stringify({
+        units: [
+          {
+            startIndex: 0,
+            endIndex: tokens.length - 1,
+            translation: '我不再使用ChatGPT回答这些问题',
+            sentenceEnd: true,
+          },
+        ],
+        corrections: [],
+        terminology: [],
+      }),
+      tokens,
+      true,
+      { entityAliases: [{ source: 'chat GBT', translation: 'ChatGPT' }] },
+    );
+
+    expect(result[0]?.sourceText).toBe('I stopped using ChatGPT for those questions.');
+  });
+
   it('records but does not apply a low-confidence correction', () => {
     const tokens = tokensFor('The speaker said Nova.');
     const result = parseAiSubtitleOutput(

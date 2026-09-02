@@ -5,7 +5,7 @@ import longSemanticFixture from '../../test/fixtures/youtube/VeizK1M7V7E.long-se
 import { buildSourceTokens, createTokenWindows } from '../domain/subtitle';
 import type { SourceToken } from '../domain/subtitle';
 import { parseJson3Captions } from '../platform/youtube/captions';
-import { translateTokenWindow } from './chatCompletions';
+import { resolveVideoEntityAliases, translateTokenWindow } from './chatCompletions';
 
 const apiKey = import.meta.env.CUEWEAVE_LLM_TOKEN;
 const tokens = buildSourceTokens(parseJson3Captions(fixture));
@@ -34,6 +34,93 @@ afterEach(() => {
 });
 
 describe('real subtitle model integration', () => {
+  it.runIf(Boolean(apiKey))(
+    'clusters the real ChatGPT ASR variants before translating windows',
+    async () => {
+      vi.stubGlobal('browser', { permissions: { contains: vi.fn().mockResolvedValue(true) } });
+      const aliases = await resolveVideoEntityAliases(
+        {
+          baseUrl: 'https://api.gpt.ge/v1',
+          apiKey,
+          model: 'gemini-3.1-flash-lite',
+          protocol: 'chat-completions',
+        },
+        [
+          {
+            observed: 'chat GBT',
+            count: 2,
+            contexts: [
+              'before chat GBT maybe people thought of AI as this very narrow thing',
+              'I had stopped using chat GBT and asked Codex all my chat questions',
+            ],
+          },
+          {
+            observed: 'CHBT',
+            count: 3,
+            contexts: [
+              'I used this CHBT work session that went for 34 hours',
+              'I think that CHBT is using up all the water in the world',
+              'CHBT just hit a billion users',
+            ],
+          },
+          {
+            observed: 'JPT',
+            count: 1,
+            contexts: ['there are a lot of people who think AI is still just JPT'],
+          },
+          {
+            observed: 'TGBT',
+            count: 1,
+            contexts: ["they won't use TGBT on principle"],
+          },
+          {
+            observed: 'GBT',
+            count: 2,
+            contexts: [
+              'before chat GBT maybe people thought of AI as this very narrow thing',
+              'I had stopped using chat GBT and asked Codex all my chat questions',
+            ],
+          },
+        ],
+        { videoTitle: 'Sam Altman on OpenAI’s next model and the AI backlash' },
+      );
+
+      expect(aliases).toEqual(
+        expect.arrayContaining([
+          { source: 'chat GBT', translation: 'ChatGPT' },
+          { source: 'CHBT', translation: 'ChatGPT' },
+          { source: 'JPT', translation: 'ChatGPT' },
+        ]),
+      );
+
+      const jptTokens = 'now I think there are a lot of people who think AI is still just um JPT'
+        .split(' ')
+        .map((text, index) => ({
+          id: `jpt-${index}`,
+          cueId: 'jpt-cue',
+          startMs: index * 240,
+          endMs: (index + 1) * 240,
+          text,
+        }));
+      const cues = await translateTokenWindow(
+        {
+          baseUrl: 'https://api.gpt.ge/v1',
+          apiKey,
+          model: 'gemini-3.1-flash-lite',
+          protocol: 'chat-completions',
+        },
+        jptTokens,
+        undefined,
+        undefined,
+        { entityAliases: aliases },
+      );
+      expect(cues.map((cue) => cue.sourceText).join(' ')).toContain('ChatGPT');
+      expect(cues.map((cue) => cue.sourceText).join(' ')).not.toContain('JPT');
+      expect(cues.map((cue) => cue.translation).join(' ')).toContain('ChatGPT');
+    },
+    120_000,
+  );
+
   it.runIf(Boolean(apiKey))(
     'keeps hey with the statement that follows it',
     async () => {

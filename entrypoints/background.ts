@@ -13,10 +13,18 @@ import {
   type TranslationProgressStage,
 } from '../src/provider/messages';
 import { readProviderSettings } from '../src/provider/settings';
-import { testProviderConnection, translateTokenWindow } from '../src/provider/chatCompletions';
+import {
+  resolveVideoEntityAliases,
+  testProviderConnection,
+  translateTokenWindow,
+} from '../src/provider/chatCompletions';
 import { ProviderError } from '../src/provider/types';
 import { AI_PROMPT_VERSION, DISPLAY_SEGMENTATION_VERSION } from '../src/domain/subtitle/ai';
-import type { DisplayCue } from '../src/domain/subtitle';
+import {
+  ENTITY_ALIAS_PROMPT_VERSION,
+  type DisplayCue,
+  type TranslationTerm,
+} from '../src/domain/subtitle';
 import { createTranslationCacheKey, TranslationCache } from '../src/cache/translationCache';
 import { TranslationQueue } from '../src/provider/translationQueue';
 import {
@@ -26,6 +34,12 @@ import {
   readVideoGlossaryState,
   upsertManualVideoGlossaryTerm,
 } from '../src/context/videoGlossary';
+import {
+  clearVideoEntityAliases,
+  createEntityAliasFingerprint,
+  readVideoEntityAliases,
+  writeVideoEntityAliases,
+} from '../src/context/videoEntityAliases';
 import {
   GET_CONTENT_SETTINGS_MESSAGE,
   REFRESH_VIDEO_TRANSLATIONS_MESSAGE,
@@ -42,6 +56,7 @@ const ENABLED_KEY = 'cueweave.enabled';
 const translationCache = new TranslationCache();
 const translationQueue = new TranslationQueue(2);
 const translationSessionControllers = new Map<string, Set<AbortController>>();
+const entityAliasResolutions = new Map<string, Promise<TranslationTerm[]>>();
 let cacheGeneration = 0;
 
 async function broadcastSubtitlePreferences(preferences: SubtitlePreferences): Promise<void> {
@@ -120,11 +135,76 @@ function validTranslationContext(message: TranslateWindowMessage): boolean {
     (message.context.videoDescription?.length ?? 0) <= 1_200 &&
     (message.context.transcriptEvidence?.length ?? 0) <= 80 &&
     (message.context.transcriptEvidence ?? []).every((term) => term.length <= 96) &&
+    (message.context.entityCandidates?.length ?? 0) <= 48 &&
+    (message.context.entityCandidates ?? []).every(
+      (candidate) =>
+        candidate.observed.length > 0 &&
+        candidate.observed.length <= 96 &&
+        candidate.count > 0 &&
+        candidate.count <= 100_000 &&
+        candidate.contexts.length <= 3 &&
+        candidate.contexts.every((context) => context.length > 0 && context.length <= 360),
+    ) &&
     (message.previousCues?.length ?? 0) <= 6 &&
     (message.previousCues ?? []).every(
       (cue) => cue.sourceText.length <= 500 && cue.translation.length <= 500,
     )
   );
+}
+
+async function entityAliasesForMessage(
+  message: TranslateWindowMessage,
+  settings: Awaited<ReturnType<typeof readProviderSettings>>,
+  manualTerminology: readonly TranslationTerm[],
+  signal: AbortSignal,
+  onResolveStart?: () => void,
+): Promise<TranslationTerm[]> {
+  const candidates = message.context.entityCandidates ?? [];
+  if (candidates.length < 2 || message.context.correctionEnabled === false) return [];
+  const fingerprint = await createEntityAliasFingerprint({
+    version: ENTITY_ALIAS_PROMPT_VERSION,
+    model: settings.model,
+    protocol: settings.protocol,
+    videoTitle: message.context.videoTitle ?? '',
+    channelName: message.context.channelName ?? '',
+    videoDescription: message.context.videoDescription ?? '',
+    candidates,
+    manualTerminology,
+  });
+  const resolutionKey = `${message.context.videoId}:${fingerprint}`;
+  const cached = await readVideoEntityAliases(message.context.videoId, fingerprint).catch(
+    () => undefined,
+  );
+  if (cached) return cached;
+  const existing = entityAliasResolutions.get(resolutionKey);
+  if (existing) {
+    onResolveStart?.();
+    return existing;
+  }
+
+  onResolveStart?.();
+  const resolution = resolveVideoEntityAliases(
+    settings,
+    candidates,
+    {
+      ...(message.context.videoTitle ? { videoTitle: message.context.videoTitle } : {}),
+      ...(message.context.channelName ? { channelName: message.context.channelName } : {}),
+      ...(message.context.videoDescription
+        ? { videoDescription: message.context.videoDescription }
+        : {}),
+      terminology: manualTerminology,
+    },
+    signal,
+  )
+    .then(async (aliases) => {
+      await writeVideoEntityAliases(message.context.videoId, fingerprint, aliases).catch(
+        () => undefined,
+      );
+      return aliases;
+    })
+    .finally(() => entityAliasResolutions.delete(resolutionKey));
+  entityAliasResolutions.set(resolutionKey, resolution);
+  return resolution;
 }
 
 async function rememberCueTerminology(videoId: string, cues: readonly DisplayCue[]): Promise<void> {
@@ -159,9 +239,19 @@ async function translateWindowMessage(
       terms: [],
       manualTerms: [],
     }));
+    const entityAliases = await entityAliasesForMessage(
+      message,
+      settings,
+      glossary.manualTerms,
+      requestController.signal,
+      () => onProgress?.('resolving-entities'),
+    ).catch(() => []);
     const terminologyBySource = new Map(
       glossary.terms.map((term) => [term.source.toLocaleLowerCase(), term]),
     );
+    for (const alias of entityAliases) {
+      terminologyBySource.set(alias.source.toLocaleLowerCase(), alias);
+    }
     for (const term of glossary.manualTerms) {
       terminologyBySource.set(term.source.toLocaleLowerCase(), term);
     }
@@ -183,6 +273,7 @@ async function translateWindowMessage(
         ? { transcriptEvidence: message.context.transcriptEvidence }
         : {}),
       manualTerminology: glossary.manualTerms,
+      entityAliases,
       correctionEnabled: message.context.correctionEnabled,
     });
 
@@ -228,6 +319,7 @@ async function translateWindowMessage(
             : {}),
           correctionEnabled: message.context.correctionEnabled,
           terminology,
+          entityAliases,
           ...(message.previousCues ? { previousCues: message.previousCues } : {}),
         },
       );
@@ -336,6 +428,7 @@ export default defineBackground(() => {
           ? translationCache.clearVideo(message.videoId)
           : translationCache.clear().then(() => undefined),
         clearVideoGlossary(message.videoId),
+        clearVideoEntityAliases(message.videoId),
       ])
         .then(async ([removedEntries]) => ({
           ok: true,

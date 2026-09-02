@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { SourceToken } from '../domain/subtitle';
-import { testProviderConnection, translateTokenWindow } from './chatCompletions';
+import {
+  resolveVideoEntityAliases,
+  testProviderConnection,
+  translateTokenWindow,
+} from './chatCompletions';
 import type { ProviderSettings } from './types';
 
 const settings: ProviderSettings = {
@@ -30,6 +34,34 @@ afterEach(() => {
 });
 
 describe('Chat Completions provider', () => {
+  it('resolves video-wide entity variants with a dedicated structured request', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      completion({
+        clusters: [
+          {
+            canonical: 'ChatGPT',
+            aliases: ['chat GBT', 'CHBT', 'JPT'],
+            confidence: 0.97,
+          },
+        ],
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('browser', { permissions: { contains: vi.fn().mockResolvedValue(true) } });
+
+    const result = await resolveVideoEntityAliases(settings, [
+      { observed: 'chat GBT', count: 2, contexts: ['before chat GBT'] },
+      { observed: 'CHBT', count: 3, contexts: ['CHBT just hit a billion users'] },
+      { observed: 'JPT', count: 1, contexts: ['AI is still just JPT'] },
+    ]);
+
+    expect(result).toContainEqual({ source: 'CHBT', translation: 'ChatGPT' });
+    const request = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as {
+      response_format?: { json_schema?: { name?: string } };
+    };
+    expect(request.response_format?.json_schema?.name).toBe('cueweave_entity_aliases');
+  });
+
   it('sends the key only in the background request and maps valid output', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       completion({

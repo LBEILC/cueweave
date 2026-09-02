@@ -6,6 +6,18 @@ export { segmentCues } from './segment';
 export { buildSourceTokens, createLocalDisplayCues, createTokenWindows } from './tokens';
 export { serializeSubtitles, subtitleExportFilename } from './export';
 export { extractTranscriptEvidenceTerms, extractUnitTechnicalEntities } from './evidence';
+export {
+  buildEntityAliasPrompt,
+  buildEntityAliasAttachmentPrompt,
+  ENTITY_ALIAS_ATTACHMENT_SCHEMA,
+  ENTITY_ALIAS_PROMPT_VERSION,
+  ENTITY_ALIAS_SCHEMA,
+  extractTranscriptEntityCandidates,
+  inferAnchoredAcronymAliases,
+  parseEntityAliasAttachmentOutput,
+  parseEntityAliasOutput,
+} from './entities';
+export type { EntityResolutionContext, TranscriptEntityCandidate } from './entities';
 export type { SubtitleExportFormat, SubtitleExportMode } from './export';
 export type {
   DisplayCue,

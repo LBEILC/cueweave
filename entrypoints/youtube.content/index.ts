@@ -2,6 +2,7 @@ import {
   buildSourceTokens,
   createLocalDisplayCues,
   createTokenWindows,
+  extractTranscriptEntityCandidates,
   extractTranscriptEvidenceTerms,
   type DisplayCue,
   type RawCue,
@@ -395,6 +396,7 @@ function currentVideoContext(): {
   channelName?: string;
   videoDescription?: string;
   transcriptEvidence?: string[];
+  entityCandidates?: ReturnType<typeof extractTranscriptEntityCandidates>;
 } {
   const rawTitle =
     document.querySelector<HTMLElement>('ytd-watch-metadata h1')?.innerText.trim() ||
@@ -408,11 +410,13 @@ function currentVideoContext(): {
       .querySelector<HTMLElement>('ytd-watch-metadata #description-inline-expander')
       ?.innerText.trim();
   const transcriptEvidence = extractTranscriptEvidenceTerms(sourceTokens);
+  const entityCandidates = extractTranscriptEntityCandidates(sourceTokens);
   return {
     ...(rawTitle ? { videoTitle: rawTitle.slice(0, 200) } : {}),
     ...(channelName ? { channelName: channelName.slice(0, 120) } : {}),
     ...(videoDescription ? { videoDescription: videoDescription.slice(0, 1_200) } : {}),
     ...(transcriptEvidence.length > 0 ? { transcriptEvidence } : {}),
+    ...(entityCandidates.length > 1 ? { entityCandidates } : {}),
   };
 }
 
@@ -740,11 +744,13 @@ function renderLoop(): void {
   ) {
     if (activeWindowState?.status === 'working') {
       actionLabel =
-        activeWindowState.stage === 'repairing-boundaries'
-          ? '正在修复断句'
-          : activeWindowState.stage === 'repairing-output'
-            ? '正在修复字幕'
-            : '正在翻译此处';
+        activeWindowState.stage === 'resolving-entities'
+          ? '正在识别专有名词'
+          : activeWindowState.stage === 'repairing-boundaries'
+            ? '正在修复断句'
+            : activeWindowState.stage === 'repairing-output'
+              ? '正在修复字幕'
+              : '正在翻译此处';
       actionDisabled = true;
     } else if (
       activeWindowState?.status === 'failed' &&
@@ -953,7 +959,8 @@ export default defineContentScript({
         'windowId' in message &&
         typeof message.windowId === 'string' &&
         'stage' in message &&
-        (message.stage === 'translating' ||
+        (message.stage === 'resolving-entities' ||
+          message.stage === 'translating' ||
           message.stage === 'repairing-boundaries' ||
           message.stage === 'repairing-output')
       ) {
@@ -971,11 +978,13 @@ export default defineContentScript({
           updateState({
             aiStatus: 'working',
             aiMessage:
-              message.stage === 'repairing-boundaries'
-                ? '正在修复当前位置的断句。'
-                : message.stage === 'repairing-output'
-                  ? '正在修复当前位置的字幕结果。'
-                  : '正在翻译当前位置。',
+              message.stage === 'resolving-entities'
+                ? '正在识别本视频中的专有名词。'
+                : message.stage === 'repairing-boundaries'
+                  ? '正在修复当前位置的断句。'
+                  : message.stage === 'repairing-output'
+                    ? '正在修复当前位置的字幕结果。'
+                    : '正在翻译当前位置。',
           });
         }
         return Promise.resolve({ ok: true });

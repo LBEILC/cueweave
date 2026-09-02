@@ -1,4 +1,19 @@
-import type { DisplayCue, SourceToken } from '../domain/subtitle';
+import type {
+  DisplayCue,
+  EntityResolutionContext,
+  SourceToken,
+  TranscriptEntityCandidate,
+  TranslationTerm,
+} from '../domain/subtitle';
+import {
+  buildEntityAliasAttachmentPrompt,
+  buildEntityAliasPrompt,
+  ENTITY_ALIAS_ATTACHMENT_SCHEMA,
+  ENTITY_ALIAS_SCHEMA,
+  inferAnchoredAcronymAliases,
+  parseEntityAliasAttachmentOutput,
+  parseEntityAliasOutput,
+} from '../domain/subtitle';
 import {
   AI_SUBTITLE_SCHEMA,
   AiSubtitleBoundaryError,
@@ -389,6 +404,89 @@ export async function translateTokenWindow(
   }
 
   throw invalidResponseError(lastError);
+}
+
+export async function resolveVideoEntityAliases(
+  settings: ProviderSettings,
+  candidates: readonly TranscriptEntityCandidate[],
+  context: EntityResolutionContext = {},
+  signal?: AbortSignal,
+): Promise<TranslationTerm[]> {
+  if (candidates.length < 2) return [];
+  const content = await postProviderResponse(
+    settings,
+    [SYSTEM_MESSAGE, { role: 'user', content: buildEntityAliasPrompt(candidates, context) }],
+    {
+      type: 'json_schema',
+      json_schema: {
+        name: 'cueweave_entity_aliases',
+        strict: true,
+        schema: ENTITY_ALIAS_SCHEMA,
+      },
+    },
+    signal,
+  );
+  try {
+    const anchoredAliases = parseEntityAliasOutput(content, candidates, context);
+    if (anchoredAliases.length === 0) return [];
+    const normalized = (value: string) =>
+      value
+        .normalize('NFKC')
+        .toLocaleLowerCase()
+        .replace(/[^\p{L}\p{N}]+/gu, '');
+    const anchoredSources = new Set(anchoredAliases.map((alias) => normalized(alias.source)));
+    const canonicals = new Set(anchoredAliases.map((alias) => normalized(alias.translation)));
+    const remainingCandidates = candidates.filter(
+      (candidate) =>
+        !anchoredSources.has(normalized(candidate.observed)) &&
+        !canonicals.has(normalized(candidate.observed)),
+    );
+    if (remainingCandidates.length === 0) return anchoredAliases;
+
+    const attachmentContent = await postProviderResponse(
+      settings,
+      [
+        SYSTEM_MESSAGE,
+        {
+          role: 'user',
+          content: buildEntityAliasAttachmentPrompt(
+            remainingCandidates,
+            anchoredAliases,
+            candidates,
+          ),
+        },
+      ],
+      {
+        type: 'json_schema',
+        json_schema: {
+          name: 'cueweave_entity_alias_attachments',
+          strict: true,
+          schema: ENTITY_ALIAS_ATTACHMENT_SCHEMA,
+        },
+      },
+      signal,
+    );
+    const attachedAliases = parseEntityAliasAttachmentOutput(
+      attachmentContent,
+      remainingCandidates,
+      anchoredAliases,
+    );
+    const acronymAliases = inferAnchoredAcronymAliases(candidates, anchoredAliases);
+    const aliasesBySource = new Map(
+      [...anchoredAliases, ...attachedAliases, ...acronymAliases].map((alias) => [
+        normalized(alias.source),
+        alias,
+      ]),
+    );
+    return [...aliasesBySource.values()];
+  } catch (error) {
+    throw new ProviderError(
+      'invalid-response',
+      error instanceof Error
+        ? `${error.message} CueWeave 将保留原始实体写法。`
+        : '模型返回的实体归并结果无效。CueWeave 将保留原始实体写法。',
+    );
+  }
 }
 
 export async function testProviderConnection(

@@ -1,4 +1,9 @@
-import type { DisplayCue, SourceToken, TranslationTerm } from '../domain/subtitle';
+import type {
+  DisplayCue,
+  SourceToken,
+  TranscriptEntityCandidate,
+  TranslationTerm,
+} from '../domain/subtitle';
 import type { ProviderFailure, ProviderTestResult } from './types';
 
 export const TEST_PROVIDER_MESSAGE = 'cueweave:test-provider';
@@ -12,7 +17,8 @@ export const UPSERT_VIDEO_GLOSSARY_TERM_MESSAGE = 'cueweave:upsert-video-glossar
 export const DELETE_VIDEO_GLOSSARY_TERM_MESSAGE = 'cueweave:delete-video-glossary-term';
 
 export type TranslationPriority = 'current' | 'prefetch';
-export type TranslationProgressStage = 'translating' | 'repairing-boundaries' | 'repairing-output';
+export type TranslationProgressStage =
+  'resolving-entities' | 'translating' | 'repairing-boundaries' | 'repairing-output';
 
 export interface TranslationContext {
   videoId: string;
@@ -23,6 +29,7 @@ export interface TranslationContext {
   channelName?: string;
   videoDescription?: string;
   transcriptEvidence?: string[];
+  entityCandidates?: TranscriptEntityCandidate[];
   correctionEnabled: boolean;
 }
 
@@ -219,6 +226,22 @@ export function isTranslateWindowMessage(value: unknown): value is TranslateWind
       value.context.transcriptEvidence === undefined ||
       (Array.isArray(value.context.transcriptEvidence) &&
         value.context.transcriptEvidence.every((term) => typeof term === 'string'))) &&
+    (!('entityCandidates' in value.context) ||
+      value.context.entityCandidates === undefined ||
+      (Array.isArray(value.context.entityCandidates) &&
+        value.context.entityCandidates.every(
+          (candidate) =>
+            typeof candidate === 'object' &&
+            candidate !== null &&
+            'observed' in candidate &&
+            typeof candidate.observed === 'string' &&
+            'count' in candidate &&
+            typeof candidate.count === 'number' &&
+            Number.isInteger(candidate.count) &&
+            'contexts' in candidate &&
+            Array.isArray(candidate.contexts) &&
+            candidate.contexts.every((context: unknown) => typeof context === 'string'),
+        ))) &&
     (!('previousCues' in value) ||
       value.previousCues === undefined ||
       (Array.isArray(value.previousCues) &&
