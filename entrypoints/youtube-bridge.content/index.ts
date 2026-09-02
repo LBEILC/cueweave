@@ -2,6 +2,7 @@ import {
   addPlaybackContext,
   fetchCaptionTrack,
   fetchCaptionTrackViaInnertube,
+  fetchCaptionTracksViaInnertube,
 } from '../../src/platform/youtube/captions';
 import {
   CAPTION_TRACK_REQUEST_EVENT,
@@ -45,16 +46,14 @@ function readPlayerResponse(): YouTubePlayerResponse | undefined {
     .ytInitialPlayerResponse;
 }
 
-function currentVideoId(response: YouTubePlayerResponse | undefined): string {
-  if (response?.videoDetails?.videoId) return response.videoDetails.videoId;
+function currentVideoId(): string {
   const url = new URL(window.location.href);
   return url.searchParams.get('v') ?? url.pathname.match(/^\/shorts\/([^/]+)/u)?.[1] ?? '';
 }
 
-function publishCaptionTracks(): void {
-  const response = readPlayerResponse();
+function mapCaptionTracks(response: YouTubePlayerResponse | undefined): CaptionTrack[] {
   const rawTracks = response?.captions?.playerCaptionsTracklistRenderer?.captionTracks ?? [];
-  const tracks: CaptionTrack[] = rawTracks.flatMap((track) => {
+  return rawTracks.flatMap((track) => {
     if (!track.baseUrl || !track.languageCode) return [];
     return [
       {
@@ -65,8 +64,35 @@ function publishCaptionTracks(): void {
       },
     ];
   });
+}
+
+const trackRequests = new Map<string, Promise<CaptionTrack[]>>();
+
+function discoverCaptionTracks(videoId: string, apiKey: string): Promise<CaptionTrack[]> {
+  const existing = trackRequests.get(videoId);
+  if (existing) return existing;
+
+  const request = fetchCaptionTracksViaInnertube({ videoId, apiKey }).catch(() => []);
+  trackRequests.set(videoId, request);
+  if (trackRequests.size > 12) {
+    const oldestVideoId = trackRequests.keys().next().value;
+    if (oldestVideoId) trackRequests.delete(oldestVideoId);
+  }
+  return request;
+}
+
+async function publishCaptionTracks(): Promise<void> {
+  const videoId = currentVideoId();
+  if (!videoId) return;
+
+  const response = readPlayerResponse();
+  let tracks = response?.videoDetails?.videoId === videoId ? mapCaptionTracks(response) : [];
+  if (tracks.length === 0) {
+    const apiKey = readInnertubeApiKey();
+    if (apiKey) tracks = await discoverCaptionTracks(videoId, apiKey);
+  }
   const detail: CaptionTracksEventDetail = {
-    videoId: currentVideoId(response),
+    videoId,
     tracks,
   };
 
@@ -186,9 +212,9 @@ export default defineContentScript({
   runAt: 'document_start',
   main() {
     const publishSoon = () => {
-      window.setTimeout(publishCaptionTracks, 0);
-      window.setTimeout(publishCaptionTracks, 600);
-      window.setTimeout(publishCaptionTracks, 1_500);
+      window.setTimeout(() => void publishCaptionTracks(), 0);
+      window.setTimeout(() => void publishCaptionTracks(), 600);
+      window.setTimeout(() => void publishCaptionTracks(), 1_500);
     };
 
     window.addEventListener('yt-navigate-finish', publishSoon);

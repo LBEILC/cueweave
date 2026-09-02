@@ -39,7 +39,7 @@ import {
 } from '../../src/settings/subtitle';
 
 const OVERLAY_ID = 'cueweave-subtitle-overlay';
-const CONTENT_BUILD_MARKER = 'spa-session-v1';
+const CONTENT_BUILD_MARKER = 'spa-innertube-v1';
 const PREFETCH_WINDOW_COUNT = 3;
 
 type WindowTranslationStatus = 'working' | 'ready' | 'failed';
@@ -77,7 +77,6 @@ let focusedWindowId = '';
 let translationFocusVersion = 0;
 let observedVideo: HTMLVideoElement | undefined;
 let observedLocationVideoId: string | undefined;
-let navigationPending = false;
 
 function updateState(patch: Partial<ContentState>): void {
   state = { ...state, ...patch };
@@ -647,7 +646,7 @@ function requestCaptionTrack(track: CaptionTrack, signal: AbortSignal): Promise<
 }
 
 async function loadTrack(detail: CaptionTracksEventDetail): Promise<void> {
-  if (navigationPending || !isCaptionEventForCurrentVideo(window.location.href, detail.videoId)) {
+  if (!isCaptionEventForCurrentVideo(window.location.href, detail.videoId)) {
     return;
   }
 
@@ -813,11 +812,9 @@ export default defineContentScript({
     });
 
     window.addEventListener('yt-navigate-start', () => {
-      navigationPending = true;
       resetSubtitleSession(undefined, '正在切换视频。');
     });
     window.addEventListener('yt-navigate-finish', () => {
-      navigationPending = false;
       synchronizeVideoSession();
     });
     window.addEventListener('popstate', synchronizeVideoSession);
