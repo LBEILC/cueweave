@@ -32,6 +32,14 @@ import {
 const OVERLAY_ID = 'cueweave-subtitle-overlay';
 const PREFETCH_WINDOW_COUNT = 3;
 
+type WindowTranslationStatus = 'working' | 'ready' | 'failed';
+
+interface WindowTranslationState {
+  status: WindowTranslationStatus;
+  priority: 'current' | 'prefetch';
+  failureCode?: string;
+}
+
 let state: ContentState = {
   status: 'idle',
   enabled: true,
@@ -45,16 +53,18 @@ let translatedCues: DisplayCue[] = [];
 let sourceTokens: SourceToken[] = [];
 let tokenWindows: TokenWindow[] = [];
 let subtitlePreferences: SubtitlePreferences = { ...DEFAULT_SUBTITLE_PREFERENCES };
-let translationRetryAfterMs = 0;
-const windowStates = new Map<string, 'working' | 'ready' | 'failed'>();
+const windowStates = new Map<string, WindowTranslationState>();
+const windowRetryAfterMs = new Map<string, number>();
 let overlayRoot: HTMLDivElement | undefined;
 let overlayTranslation: HTMLDivElement | undefined;
 let overlaySource: HTMLDivElement | undefined;
+let overlayTranslateButton: HTMLButtonElement | undefined;
 let activeRequest: AbortController | undefined;
 let loadedTrackKey = '';
 let subtitleSession = 0;
 let focusedWindowId = '';
 let translationFocusVersion = 0;
+let observedVideo: HTMLVideoElement | undefined;
 
 function updateState(patch: Partial<ContentState>): void {
   state = { ...state, ...patch };
@@ -107,7 +117,6 @@ function ensureOverlay(): HTMLDivElement | undefined {
   document.getElementById(OVERLAY_ID)?.remove();
   const host = document.createElement('div');
   host.id = OVERLAY_ID;
-  host.setAttribute('aria-hidden', 'true');
   host.style.cssText = [
     'position:absolute',
     'inset:0',
@@ -173,6 +182,42 @@ function ensureOverlay(): HTMLDivElement | undefined {
       line-height: 1.36;
     }
     .cueweave-caption[data-mode="translation"] .cueweave-source { display: none; }
+    .cueweave-translate-action {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      min-height: 2.15em;
+      margin: 0.55em auto 0;
+      padding: 0.28em 0.72em 0.32em;
+      border: 1px solid rgb(242 163 58 / 58%);
+      border-radius: 2px;
+      color: #f7d9ad;
+      background: rgb(54 43 30 / 88%);
+      font: inherit;
+      font-size: 0.56em;
+      font-weight: 600;
+      letter-spacing: 0.015em;
+      line-height: 1.2;
+      pointer-events: auto;
+      cursor: pointer;
+    }
+    .cueweave-caption[data-action="true"] .cueweave-translate-action {
+      display: inline-flex;
+    }
+    .cueweave-translate-action:hover:not(:disabled) {
+      border-color: rgb(242 163 58 / 84%);
+      background: rgb(72 52 31 / 94%);
+    }
+    .cueweave-translate-action:focus-visible {
+      outline: 3px solid rgb(242 163 58 / 52%);
+      outline-offset: 3px;
+    }
+    .cueweave-translate-action:disabled {
+      color: #d4ccc1;
+      border-color: rgb(212 204 193 / 28%);
+      background: rgb(42 38 33 / 80%);
+      cursor: wait;
+    }
   `;
   overlayRoot = document.createElement('div');
   overlayRoot.className = 'cueweave-caption';
@@ -183,7 +228,20 @@ function ensureOverlay(): HTMLDivElement | undefined {
   overlayTranslation.className = 'cueweave-translation';
   overlaySource = document.createElement('div');
   overlaySource.className = 'cueweave-source';
-  overlayRoot.append(overlayTranslation, overlaySource);
+  overlayTranslateButton = document.createElement('button');
+  overlayTranslateButton.className = 'cueweave-translate-action';
+  overlayTranslateButton.type = 'button';
+  overlayTranslateButton.addEventListener('pointerdown', (event) => event.stopPropagation());
+  overlayTranslateButton.addEventListener('click', (event) => {
+    event.stopPropagation();
+    if (overlayTranslateButton?.dataset.intent === 'configure') {
+      void browser.runtime.openOptionsPage();
+      return;
+    }
+    const video = document.querySelector<HTMLVideoElement>('video.html5-main-video');
+    if (video) void ensureTranslatedWindow(video.currentTime * 1_000, true);
+  });
+  overlayRoot.append(overlayTranslation, overlaySource, overlayTranslateButton);
   shadow.append(style, overlayRoot);
   player.append(host);
   applySubtitlePreferences(host);
@@ -228,30 +286,55 @@ function continuePrefetch(
   if (nextWindow) void translateWindow(nextWindow, remainingPrefetch - 1, focusVersion);
 }
 
+function mergeTranslatedCues(cues: readonly DisplayCue[]): void {
+  const cuesById = new Map(translatedCues.map((cue) => [cue.id, cue]));
+  for (const cue of cues) cuesById.set(cue.id, cue);
+  translatedCues = [...cuesById.values()].sort((left, right) => left.startMs - right.startMs);
+}
+
 async function translateWindow(
   window: TokenWindow,
   remainingPrefetch: number,
   focusVersion: number,
+  force = false,
 ): Promise<void> {
-  if (Date.now() < translationRetryAfterMs) return;
-  if (translationRetryAfterMs > 0) {
-    translationRetryAfterMs = 0;
-    for (const [windowId, windowState] of windowStates) {
-      if (windowState === 'failed') windowStates.delete(windowId);
-    }
-  }
-  const existingState = windowStates.get(window.id);
-  if (existingState) {
-    if (existingState === 'ready') continuePrefetch(window, remainingPrefetch, focusVersion);
+  const priority = remainingPrefetch === PREFETCH_WINDOW_COUNT ? 'current' : 'prefetch';
+  const retryAfterMs = windowRetryAfterMs.get(window.id) ?? 0;
+  if (force) {
+    windowRetryAfterMs.delete(window.id);
+    if (windowStates.get(window.id)?.status === 'failed') windowStates.delete(window.id);
+  } else if (Date.now() < retryAfterMs) {
     return;
+  } else if (retryAfterMs > 0) {
+    windowRetryAfterMs.delete(window.id);
+    if (windowStates.get(window.id)?.status === 'failed') windowStates.delete(window.id);
+  }
+
+  const existingState = windowStates.get(window.id);
+  let promotingPrefetch = false;
+  if (existingState) {
+    if (existingState.status === 'ready') {
+      continuePrefetch(window, remainingPrefetch, focusVersion);
+      return;
+    }
+    if (existingState.status === 'working') {
+      if (priority === 'current' && existingState.priority === 'prefetch') {
+        windowStates.set(window.id, { status: 'working', priority: 'current' });
+        promotingPrefetch = true;
+      } else {
+        return;
+      }
+    } else {
+      return;
+    }
   }
   const requestSession = subtitleSession;
 
-  windowStates.set(window.id, 'working');
+  if (!promotingPrefetch) windowStates.set(window.id, { status: 'working', priority });
   updateState({
     aiStatus: 'working',
     aiMessage:
-      remainingPrefetch === PREFETCH_WINDOW_COUNT
+      priority === 'current'
         ? '正在翻译当前位置。'
         : `正在准备 ${formatTime(window.endMs)} 前的后续字幕。`,
   });
@@ -265,27 +348,27 @@ async function translateWindow(
         languageCode: state.languageCode ?? '',
         windowId: window.id,
       },
-      priority: remainingPrefetch === PREFETCH_WINDOW_COUNT ? 'current' : 'prefetch',
+      priority,
     })) as TranslateWindowResult;
     if (requestSession !== subtitleSession) return;
 
     if (!result.ok) {
-      windowStates.set(window.id, 'failed');
+      windowStates.set(window.id, { status: 'failed', priority, failureCode: result.error.code });
+      const needsConfiguration =
+        result.error.code === 'not-configured' || result.error.code === 'permission-missing';
+      windowRetryAfterMs.set(window.id, Date.now() + (needsConfiguration ? 15_000 : 30_000));
       if (focusVersion !== translationFocusVersion) return;
-      if (result.error.code === 'not-configured' || result.error.code === 'permission-missing') {
-        translationRetryAfterMs = Date.now() + 15_000;
+      if (needsConfiguration) {
         updateState({ aiStatus: 'unconfigured', aiMessage: result.error.message });
       } else {
-        translationRetryAfterMs = Date.now() + 30_000;
         updateState({ aiStatus: 'error', aiMessage: result.error.message });
       }
       return;
     }
 
-    windowStates.set(window.id, 'ready');
-    translatedCues = [...translatedCues, ...result.cues].sort(
-      (left, right) => left.startMs - right.startMs,
-    );
+    windowRetryAfterMs.delete(window.id);
+    windowStates.set(window.id, { status: 'ready', priority });
+    mergeTranslatedCues(result.cues);
     if (focusVersion === translationFocusVersion) {
       updateState({
         aiStatus: 'ready',
@@ -297,9 +380,9 @@ async function translateWindow(
     continuePrefetch(window, remainingPrefetch, focusVersion);
   } catch {
     if (requestSession !== subtitleSession) return;
-    windowStates.set(window.id, 'failed');
+    windowStates.set(window.id, { status: 'failed', priority, failureCode: 'network' });
+    windowRetryAfterMs.set(window.id, Date.now() + 30_000);
     if (focusVersion !== translationFocusVersion) return;
-    translationRetryAfterMs = Date.now() + 30_000;
     updateState({
       aiStatus: 'error',
       aiMessage: '无法连接扩展后台。CueWeave 已保留原文字幕。',
@@ -307,35 +390,84 @@ async function translateWindow(
   }
 }
 
-async function ensureTranslatedWindow(timeMs: number): Promise<void> {
+async function ensureTranslatedWindow(timeMs: number, force = false): Promise<void> {
   const window = windowAt(timeMs);
   if (!window) return;
   if (window.id !== focusedWindowId) {
     focusedWindowId = window.id;
     translationFocusVersion += 1;
   }
-  await translateWindow(window, PREFETCH_WINDOW_COUNT, translationFocusVersion);
+  await translateWindow(window, PREFETCH_WINDOW_COUNT, translationFocusVersion, force);
+}
+
+function handleVideoSeeked(event: Event): void {
+  const video = event.currentTarget as HTMLVideoElement;
+  if (state.enabled) void ensureTranslatedWindow(video.currentTime * 1_000, true);
+}
+
+function observeVideo(video: HTMLVideoElement | null | undefined): void {
+  const nextVideo = video ?? undefined;
+  if (nextVideo === observedVideo) return;
+  observedVideo?.removeEventListener('seeked', handleVideoSeeked);
+  observedVideo = nextVideo;
+  observedVideo?.addEventListener('seeked', handleVideoSeeked);
 }
 
 function renderLoop(): void {
   const target = ensureOverlay();
   const video = document.querySelector<HTMLVideoElement>('video.html5-main-video');
+  observeVideo(video);
   const timeMs = video ? video.currentTime * 1_000 : 0;
-  if (state.enabled && video) void ensureTranslatedWindow(timeMs);
+  if (state.enabled && video && !video.seeking) void ensureTranslatedWindow(timeMs);
   const translatedCue =
     state.enabled && video ? currentDisplayCueAt(translatedCues, timeMs) : undefined;
   const fallbackCue = state.enabled && video ? currentDisplayCueAt(displayCues, timeMs) : undefined;
   const displayCue = translatedCue ?? fallbackCue;
   const translation = translatedCue?.translation ?? '';
   const source = displayCue?.sourceText ?? '';
+  const activeWindow = state.enabled && video ? windowAt(timeMs) : undefined;
+  const activeWindowState = activeWindow ? windowStates.get(activeWindow.id) : undefined;
+
+  let actionLabel = '';
+  let actionIntent = '';
+  let actionDisabled = false;
+  if (fallbackCue && !translatedCue && activeWindow) {
+    if (activeWindowState?.status === 'working') {
+      actionLabel = '正在翻译此处';
+      actionDisabled = true;
+    } else if (
+      activeWindowState?.status === 'failed' &&
+      (activeWindowState.failureCode === 'not-configured' ||
+        activeWindowState.failureCode === 'permission-missing')
+    ) {
+      actionLabel = '配置模型后翻译';
+      actionIntent = 'configure';
+    } else if (activeWindowState?.status === 'failed') {
+      actionLabel = '重试翻译此处';
+      actionIntent = 'retry';
+    } else if (!activeWindowState) {
+      actionLabel = '立即翻译此处';
+      actionIntent = 'translate';
+    }
+  }
 
   if (target) {
     if (overlayTranslation && overlayTranslation.textContent !== translation) {
       overlayTranslation.textContent = translation;
     }
     if (overlaySource && overlaySource.textContent !== source) overlaySource.textContent = source;
+    if (overlayTranslateButton) {
+      if (overlayTranslateButton.textContent !== actionLabel) {
+        overlayTranslateButton.textContent = actionLabel;
+      }
+      overlayTranslateButton.disabled = actionDisabled;
+      overlayTranslateButton.dataset.intent = actionIntent;
+      overlayTranslateButton.setAttribute('aria-label', actionLabel || '翻译当前位置');
+    }
     const showSource = subtitlePreferences.displayMode === 'bilingual';
-    target.dataset.visible = translation || (showSource && source) ? 'true' : 'false';
+    target.dataset.action = actionLabel ? 'true' : 'false';
+    target.dataset.visible =
+      translation || (showSource && source) || actionLabel ? 'true' : 'false';
     target.dataset.translated = translation ? 'true' : 'false';
     target.dataset.mode = subtitlePreferences.displayMode;
   }
@@ -399,7 +531,7 @@ async function loadTrack(detail: CaptionTracksEventDetail): Promise<void> {
     sourceTokens = [];
     tokenWindows = [];
     windowStates.clear();
-    translationRetryAfterMs = 0;
+    windowRetryAfterMs.clear();
     focusedWindowId = '';
     translationFocusVersion += 1;
     updateState({
@@ -426,7 +558,7 @@ async function loadTrack(detail: CaptionTracksEventDetail): Promise<void> {
   sourceTokens = [];
   tokenWindows = [];
   windowStates.clear();
-  translationRetryAfterMs = 0;
+  windowRetryAfterMs.clear();
   focusedWindowId = '';
   translationFocusVersion += 1;
   updateState({
@@ -460,6 +592,7 @@ async function loadTrack(detail: CaptionTracksEventDetail): Promise<void> {
     sourceTokens = [];
     tokenWindows = [];
     windowStates.clear();
+    windowRetryAfterMs.clear();
     updateState({
       status: 'error',
       cueCount: 0,

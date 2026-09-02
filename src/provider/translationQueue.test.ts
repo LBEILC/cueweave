@@ -47,4 +47,30 @@ describe('TranslationQueue', () => {
     await expect(Promise.all([first, second])).resolves.toEqual(['translated', 'translated']);
     expect(run).toHaveBeenCalledTimes(1);
   });
+
+  it('promotes an already queued prefetch window when playback seeks into it', async () => {
+    const queue = new TranslationQueue(1);
+    const blockerGate = deferred<string>();
+    const order: string[] = [];
+
+    const blocker = queue.enqueue('blocker', 'prefetch', async () => {
+      order.push('blocker');
+      return blockerGate.promise;
+    });
+    const olderPrefetch = queue.enqueue('older-prefetch', 'prefetch', async () => {
+      order.push('older-prefetch');
+      return 'older';
+    });
+    const soughtWindow = queue.enqueue('sought-window', 'prefetch', async () => {
+      order.push('sought-window');
+      return 'sought';
+    });
+    const promotedWindow = queue.enqueue('sought-window', 'current', async () => 'duplicate');
+
+    blockerGate.resolve('done');
+    await expect(
+      Promise.all([blocker, olderPrefetch, soughtWindow, promotedWindow]),
+    ).resolves.toEqual(['done', 'older', 'sought', 'sought']);
+    expect(order).toEqual(['blocker', 'sought-window', 'older-prefetch']);
+  });
 });
