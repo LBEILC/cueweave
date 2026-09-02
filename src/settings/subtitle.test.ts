@@ -10,6 +10,7 @@ describe('subtitle preferences', () => {
     expect(
       parseSubtitlePreferences({
         displayMode: 'translation',
+        bilingualOrder: 'source-first',
         positionPercent: 99,
         sizePercent: 40,
         backgroundEnabled: false,
@@ -17,10 +18,20 @@ describe('subtitle preferences', () => {
       }),
     ).toEqual({
       displayMode: 'translation',
+      bilingualOrder: 'source-first',
       positionPercent: 28,
       sizePercent: 75,
       backgroundEnabled: false,
       backgroundOpacityPercent: 95,
+    });
+  });
+
+  it('supports source-only display and rejects unknown language orders', () => {
+    expect(
+      parseSubtitlePreferences({ displayMode: 'source', bilingualOrder: 'unknown' }),
+    ).toMatchObject({
+      displayMode: 'source',
+      bilingualOrder: 'translation-first',
     });
   });
 

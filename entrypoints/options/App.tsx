@@ -1,6 +1,7 @@
 import {
   ArrowsOutLineVerticalIcon,
   CheckCircleIcon,
+  DatabaseIcon,
   EyeIcon,
   EyeSlashIcon,
   FloppyDiskIcon,
@@ -12,10 +13,17 @@ import {
   SubtitlesIcon,
   TextAaIcon,
   TranslateIcon,
+  TrashIcon,
   WarningCircleIcon,
 } from '@phosphor-icons/react';
 import { useEffect, useState } from 'react';
-import { TEST_PROVIDER_MESSAGE, type TestProviderResult } from '../../src/provider/messages';
+import type { TranslationCacheStats } from '../../src/cache/translationCache';
+import {
+  CLEAR_TRANSLATION_CACHE_MESSAGE,
+  GET_TRANSLATION_CACHE_STATS_MESSAGE,
+  TEST_PROVIDER_MESSAGE,
+  type TestProviderResult,
+} from '../../src/provider/messages';
 import {
   DEFAULT_PROVIDER_SETTINGS,
   providerOriginPattern,
@@ -27,6 +35,7 @@ import { UPDATE_SUBTITLE_PREFERENCES_MESSAGE } from '../../src/platform/youtube/
 import {
   DEFAULT_SUBTITLE_PREFERENCES,
   readSubtitlePreferences,
+  type BilingualOrder,
   type SubtitleDisplayMode,
   type SubtitlePreferences,
 } from '../../src/settings/subtitle';
@@ -34,6 +43,12 @@ import {
 type SaveState = 'idle' | 'saving' | 'success' | 'error';
 
 const BACKGROUND_RESPONSE_TIMEOUT_MS = 50_000;
+
+function formatCacheSize(byteSize: number): string {
+  if (byteSize < 1_024) return `${byteSize} B`;
+  if (byteSize < 1_024 * 1_024) return `${(byteSize / 1_024).toFixed(1)} KB`;
+  return `${(byteSize / (1_024 * 1_024)).toFixed(1)} MB`;
+}
 
 async function sendProviderTest(): Promise<TestProviderResult> {
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
@@ -63,6 +78,9 @@ export function App() {
   const [message, setMessage] = useState('');
   const [displaySaveState, setDisplaySaveState] = useState<SaveState>('idle');
   const [displayMessage, setDisplayMessage] = useState('');
+  const [cacheStats, setCacheStats] = useState<TranslationCacheStats>();
+  const [cacheState, setCacheState] = useState<SaveState>('idle');
+  const [cacheMessage, setCacheMessage] = useState('');
 
   useEffect(() => {
     void Promise.all([readProviderSettings(), readSubtitlePreferences()]).then(
@@ -71,7 +89,36 @@ export function App() {
         setSubtitle(subtitlePreferences);
       },
     );
+    void browser.runtime
+      .sendMessage({ type: GET_TRANSLATION_CACHE_STATS_MESSAGE })
+      .then((result: { ok?: boolean; stats?: TranslationCacheStats }) => {
+        if (!result.ok || !result.stats) throw new Error();
+        setCacheStats(result.stats);
+      })
+      .catch(() => {
+        setCacheState('error');
+        setCacheMessage('无法读取翻译缓存，请重新加载扩展后再试。');
+      });
   }, []);
+
+  const clearAllCache = async () => {
+    setCacheState('saving');
+    setCacheMessage('正在清除全部翻译缓存。');
+    try {
+      const result = (await browser.runtime.sendMessage({
+        type: CLEAR_TRANSLATION_CACHE_MESSAGE,
+      })) as { ok?: boolean; stats?: TranslationCacheStats; message?: string };
+      if (!result.ok || !result.stats) {
+        throw new Error(result.message ?? '缓存未能清除，请重新加载扩展后再试。');
+      }
+      setCacheStats(result.stats);
+      setCacheState('success');
+      setCacheMessage('全部翻译缓存已清除；需要时会重新翻译。');
+    } catch (error) {
+      setCacheState('error');
+      setCacheMessage(error instanceof Error ? error.message : '缓存清除失败，请重试。');
+    }
+  };
 
   const updateField = (field: keyof ProviderSettings, value: string) => {
     setSettings((current) => ({ ...current, [field]: value }));
@@ -109,6 +156,10 @@ export function App() {
 
   const setDisplayMode = (displayMode: SubtitleDisplayMode) => {
     updateSubtitle('displayMode', displayMode);
+  };
+
+  const setBilingualOrder = (bilingualOrder: BilingualOrder) => {
+    updateSubtitle('bilingualOrder', bilingualOrder);
   };
 
   const saveAndTest = async () => {
@@ -298,15 +349,26 @@ export function App() {
               </span>
               <span className="field-copy">
                 <span className="field-label">显示语言</span>
-                <span className="field-help">选择只看中文，或同时保留英文原文</span>
+                <span className="field-help">选择中文、原文或双语字幕</span>
               </span>
-              <div className="segmented-control" role="group" aria-label="字幕显示语言">
+              <div
+                className="segmented-control display-mode-control"
+                role="group"
+                aria-label="字幕显示语言"
+              >
                 <button
                   type="button"
                   aria-pressed={subtitle.displayMode === 'translation'}
                   onClick={() => setDisplayMode('translation')}
                 >
                   仅中文
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={subtitle.displayMode === 'source'}
+                  onClick={() => setDisplayMode('source')}
+                >
+                  仅原文
                 </button>
                 <button
                   type="button"
@@ -317,6 +379,34 @@ export function App() {
                 </button>
               </div>
             </div>
+
+            {subtitle.displayMode === 'bilingual' && (
+              <div className="field-row display-field">
+                <span className="field-icon" aria-hidden="true">
+                  <SubtitlesIcon size={19} />
+                </span>
+                <span className="field-copy">
+                  <span className="field-label">双语顺序</span>
+                  <span className="field-help">选择字幕中先显示的语言</span>
+                </span>
+                <div className="segmented-control" role="group" aria-label="双语字幕顺序">
+                  <button
+                    type="button"
+                    aria-pressed={subtitle.bilingualOrder === 'translation-first'}
+                    onClick={() => setBilingualOrder('translation-first')}
+                  >
+                    中文在上
+                  </button>
+                  <button
+                    type="button"
+                    aria-pressed={subtitle.bilingualOrder === 'source-first'}
+                    onClick={() => setBilingualOrder('source-first')}
+                  >
+                    原文在上
+                  </button>
+                </div>
+              </div>
+            )}
 
             <label className="field-row display-field">
               <span className="field-icon" aria-hidden="true">
@@ -400,7 +490,11 @@ export function App() {
 
             <div className="display-actions">
               <p className="display-guidance">
-                仅中文模式下，尚未完成翻译的位置不会显示英文降级字幕。
+                {subtitle.displayMode === 'translation'
+                  ? '仅中文模式下，尚未完成翻译的位置不会显示原文字幕。'
+                  : subtitle.displayMode === 'source'
+                    ? '仅原文模式不会发起新的模型翻译请求。'
+                    : '双语模式会按上方顺序显示翻译与原文。'}
               </p>
               <button
                 className="primary-action"
@@ -425,6 +519,55 @@ export function App() {
               </p>
             )}
           </form>
+        </section>
+
+        <section className="cache-settings" aria-labelledby="cache-heading">
+          <header className="section-heading">
+            <div>
+              <p className="section-index">03 / TRANSLATION CACHE</p>
+              <h2 id="cache-heading">管理翻译缓存</h2>
+              <p>缓存可减少重复请求；清除后，已看过的位置会在需要时重新翻译。</p>
+            </div>
+            <DatabaseIcon size={26} weight="regular" aria-hidden="true" />
+          </header>
+
+          <div className="cache-panel">
+            <div className="cache-summary" aria-live="polite">
+              <DatabaseIcon size={20} aria-hidden="true" />
+              <div>
+                <strong>
+                  {cacheStats ? `${cacheStats.entryCount} 个翻译窗口` : '正在读取缓存'}
+                </strong>
+                <span>
+                  {cacheStats
+                    ? `${cacheStats.cueCount} 条字幕 · ${formatCacheSize(cacheStats.byteSize)}`
+                    : '请稍候'}
+                </span>
+              </div>
+            </div>
+            <button
+              className="secondary-danger-action"
+              type="button"
+              disabled={cacheState === 'saving' || !cacheStats || cacheStats.entryCount === 0}
+              onClick={() => void clearAllCache()}
+            >
+              <TrashIcon size={18} aria-hidden="true" />
+              <span>{cacheState === 'saving' ? '正在清除' : '清除全部缓存'}</span>
+            </button>
+          </div>
+
+          {cacheMessage && (
+            <p className={`form-message message-${cacheState}`} role="status">
+              {cacheState === 'success' ? (
+                <CheckCircleIcon size={19} weight="fill" aria-hidden="true" />
+              ) : cacheState === 'error' ? (
+                <WarningCircleIcon size={19} weight="fill" aria-hidden="true" />
+              ) : (
+                <DatabaseIcon size={19} aria-hidden="true" />
+              )}
+              <span>{cacheMessage}</span>
+            </p>
+          )}
         </section>
       </section>
     </main>

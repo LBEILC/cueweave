@@ -29,13 +29,17 @@ import {
   type ContentSettings,
 } from '../../src/platform/youtube/types';
 import {
+  isCaptionEventForCurrentVideo,
+  videoIdFromYouTubeUrl,
+} from '../../src/platform/youtube/navigation';
+import {
   DEFAULT_SUBTITLE_PREFERENCES,
   parseSubtitlePreferences,
   type SubtitlePreferences,
 } from '../../src/settings/subtitle';
 
 const OVERLAY_ID = 'cueweave-subtitle-overlay';
-const CONTENT_BUILD_MARKER = 'boundary-neighbor-v1';
+const CONTENT_BUILD_MARKER = 'spa-session-v1';
 const PREFETCH_WINDOW_COUNT = 3;
 
 type WindowTranslationStatus = 'working' | 'ready' | 'failed';
@@ -72,11 +76,45 @@ let subtitleSession = 0;
 let focusedWindowId = '';
 let translationFocusVersion = 0;
 let observedVideo: HTMLVideoElement | undefined;
+let observedLocationVideoId: string | undefined;
+let navigationPending = false;
 
 function updateState(patch: Partial<ContentState>): void {
   state = { ...state, ...patch };
   const host = document.getElementById(OVERLAY_ID);
   if (host) reflectState(host);
+}
+
+function resetSubtitleSession(videoId?: string, message?: string): void {
+  subtitleSession += 1;
+  loadedTrackKey = '';
+  activeRequest?.abort();
+  activeRequest = undefined;
+  displayCues = [];
+  translatedCues = [];
+  sourceTokens = [];
+  tokenWindows = [];
+  windowStates.clear();
+  windowRetryAfterMs.clear();
+  focusedWindowId = '';
+  translationFocusVersion += 1;
+  updateState({
+    status: videoId ? 'loading' : 'idle',
+    videoId,
+    languageCode: undefined,
+    cueCount: 0,
+    displayCueCount: 0,
+    aiStatus: 'idle',
+    aiMessage: undefined,
+    message: videoId ? (message ?? '正在读取新视频的字幕轨。') : undefined,
+  });
+}
+
+function synchronizeVideoSession(): void {
+  const currentVideoId = videoIdFromYouTubeUrl(window.location.href);
+  if (currentVideoId === observedLocationVideoId) return;
+  observedLocationVideoId = currentVideoId;
+  resetSubtitleSession(currentVideoId);
 }
 
 function reflectState(host: HTMLElement): void {
@@ -88,6 +126,7 @@ function reflectState(host: HTMLElement): void {
   host.dataset.cueweaveAiMessage = state.aiMessage ?? '';
   host.dataset.cueweaveMessage = state.message ?? '';
   host.dataset.cueweaveDisplayMode = subtitlePreferences.displayMode;
+  host.dataset.cueweaveBilingualOrder = subtitlePreferences.bilingualOrder;
   host.dataset.cueweavePosition = String(subtitlePreferences.positionPercent);
   host.dataset.cueweaveSize = String(subtitlePreferences.sizePercent);
   host.dataset.cueweaveBackground = String(subtitlePreferences.backgroundEnabled);
@@ -112,7 +151,10 @@ function applySubtitlePreferences(host: HTMLElement): void {
     '--cueweave-caption-shadow-opacity',
     subtitlePreferences.backgroundEnabled ? '0.32' : '0',
   );
-  if (overlayRoot) overlayRoot.dataset.mode = subtitlePreferences.displayMode;
+  if (overlayRoot) {
+    overlayRoot.dataset.mode = subtitlePreferences.displayMode;
+    overlayRoot.dataset.order = subtitlePreferences.bilingualOrder;
+  }
   state = { ...state, displayMode: subtitlePreferences.displayMode };
   reflectState(host);
 }
@@ -177,7 +219,11 @@ function ensureOverlay(): HTMLDivElement | undefined {
       text-wrap: balance;
       text-shadow: 0 2px 3px rgb(0 0 0 / 72%);
     }
-    .cueweave-caption[data-visible="true"] { display: block; }
+    .cueweave-caption[data-visible="true"] {
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+    }
     .cueweave-translation { display: none; }
     .cueweave-caption[data-translated="true"] .cueweave-translation {
       display: block;
@@ -190,6 +236,19 @@ function ensureOverlay(): HTMLDivElement | undefined {
       line-height: 1.36;
     }
     .cueweave-caption[data-mode="translation"] .cueweave-source { display: none; }
+    .cueweave-caption[data-mode="source"] .cueweave-translation { display: none; }
+    .cueweave-caption[data-mode="source"] .cueweave-source {
+      margin: 0;
+      color: inherit;
+      font-size: inherit;
+      font-weight: inherit;
+      line-height: inherit;
+    }
+    .cueweave-caption[data-mode="bilingual"][data-order="source-first"][data-translated="true"] .cueweave-source {
+      order: -1;
+      margin-top: 0;
+      margin-bottom: 0.22em;
+    }
     .cueweave-translate-action {
       display: none;
       align-items: center;
@@ -232,6 +291,7 @@ function ensureOverlay(): HTMLDivElement | undefined {
   overlayRoot.dataset.visible = 'false';
   overlayRoot.dataset.translated = 'false';
   overlayRoot.dataset.mode = subtitlePreferences.displayMode;
+  overlayRoot.dataset.order = subtitlePreferences.bilingualOrder;
   overlayTranslation = document.createElement('div');
   overlayTranslation.className = 'cueweave-translation';
   overlaySource = document.createElement('div');
@@ -437,6 +497,7 @@ async function translateWindow(
 }
 
 async function ensureTranslatedWindow(timeMs: number, force = false): Promise<void> {
+  if (subtitlePreferences.displayMode === 'source') return;
   const window = windowAt(timeMs);
   if (!window) return;
   if (window.id !== focusedWindowId) {
@@ -448,7 +509,9 @@ async function ensureTranslatedWindow(timeMs: number, force = false): Promise<vo
 
 function handleVideoSeeked(event: Event): void {
   const video = event.currentTarget as HTMLVideoElement;
-  if (state.enabled) void ensureTranslatedWindow(video.currentTime * 1_000, true);
+  if (state.enabled && subtitlePreferences.displayMode !== 'source') {
+    void ensureTranslatedWindow(video.currentTime * 1_000, true);
+  }
 }
 
 function observeVideo(video: HTMLVideoElement | null | undefined): void {
@@ -460,11 +523,14 @@ function observeVideo(video: HTMLVideoElement | null | undefined): void {
 }
 
 function renderLoop(): void {
+  synchronizeVideoSession();
   const target = ensureOverlay();
   const video = document.querySelector<HTMLVideoElement>('video.html5-main-video');
   observeVideo(video);
   const timeMs = video ? video.currentTime * 1_000 : 0;
-  if (state.enabled && video && !video.seeking) void ensureTranslatedWindow(timeMs);
+  if (state.enabled && subtitlePreferences.displayMode !== 'source' && video && !video.seeking) {
+    void ensureTranslatedWindow(timeMs);
+  }
   const translatedCue =
     state.enabled && video ? currentDisplayCueAt(translatedCues, timeMs) : undefined;
   const fallbackCue = state.enabled && video ? currentDisplayCueAt(displayCues, timeMs) : undefined;
@@ -477,7 +543,12 @@ function renderLoop(): void {
   let actionLabel = '';
   let actionIntent = '';
   let actionDisabled = false;
-  if (fallbackCue && !translatedCue && activeWindow) {
+  if (
+    subtitlePreferences.displayMode !== 'source' &&
+    fallbackCue &&
+    !translatedCue &&
+    activeWindow
+  ) {
     if (activeWindowState?.status === 'working') {
       actionLabel =
         activeWindowState.stage === 'repairing-boundaries'
@@ -515,12 +586,15 @@ function renderLoop(): void {
       overlayTranslateButton.dataset.intent = actionIntent;
       overlayTranslateButton.setAttribute('aria-label', actionLabel || '翻译当前位置');
     }
-    const showSource = subtitlePreferences.displayMode === 'bilingual';
+    const showSource =
+      subtitlePreferences.displayMode === 'bilingual' ||
+      subtitlePreferences.displayMode === 'source';
     target.dataset.action = actionLabel ? 'true' : 'false';
     target.dataset.visible =
       translation || (showSource && source) || actionLabel ? 'true' : 'false';
     target.dataset.translated = translation ? 'true' : 'false';
     target.dataset.mode = subtitlePreferences.displayMode;
+    target.dataset.order = subtitlePreferences.bilingualOrder;
   }
 
   window.requestAnimationFrame(renderLoop);
@@ -573,27 +647,17 @@ function requestCaptionTrack(track: CaptionTrack, signal: AbortSignal): Promise<
 }
 
 async function loadTrack(detail: CaptionTracksEventDetail): Promise<void> {
+  if (navigationPending || !isCaptionEventForCurrentVideo(window.location.href, detail.videoId)) {
+    return;
+  }
+
+  observedLocationVideoId = detail.videoId;
   const track = preferredTrack(detail.tracks);
   if (!track) {
-    subtitleSession += 1;
-    loadedTrackKey = '';
-    displayCues = [];
-    translatedCues = [];
-    sourceTokens = [];
-    tokenWindows = [];
-    windowStates.clear();
-    windowRetryAfterMs.clear();
-    focusedWindowId = '';
-    translationFocusVersion += 1;
+    resetSubtitleSession(detail.videoId);
     updateState({
-      status: detail.videoId ? 'no-captions' : 'idle',
-      videoId: detail.videoId || undefined,
-      languageCode: undefined,
-      cueCount: 0,
-      displayCueCount: 0,
-      aiStatus: 'idle',
-      aiMessage: undefined,
-      message: detail.videoId ? '当前视频没有可用字幕。' : undefined,
+      status: 'no-captions',
+      message: '当前视频没有可用字幕。',
     });
     return;
   }
@@ -658,6 +722,7 @@ export default defineContentScript({
   matches: ['*://www.youtube.com/*'],
   runAt: 'document_start',
   async main() {
+    observedLocationVideoId = videoIdFromYouTubeUrl(window.location.href);
     try {
       const contentSettings = (await browser.runtime.sendMessage({
         type: GET_CONTENT_SETTINGS_MESSAGE,
@@ -746,6 +811,16 @@ export default defineContentScript({
       const detail = (event as CustomEvent<CaptionTracksEventDetail>).detail;
       if (detail && Array.isArray(detail.tracks)) void loadTrack(detail);
     });
+
+    window.addEventListener('yt-navigate-start', () => {
+      navigationPending = true;
+      resetSubtitleSession(undefined, '正在切换视频。');
+    });
+    window.addEventListener('yt-navigate-finish', () => {
+      navigationPending = false;
+      synchronizeVideoSession();
+    });
+    window.addEventListener('popstate', synchronizeVideoSession);
 
     window.requestAnimationFrame(renderLoop);
   },

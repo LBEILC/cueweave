@@ -24,8 +24,15 @@ export interface TranslationCacheIdentity {
 interface TranslationCacheRecord {
   key: string;
   cues: DisplayCue[];
+  videoId?: string;
   createdAt: number;
   lastAccessedAt: number;
+  byteSize: number;
+}
+
+export interface TranslationCacheStats {
+  entryCount: number;
+  cueCount: number;
   byteSize: number;
 }
 
@@ -88,6 +95,7 @@ function isTranslationCacheRecord(value: unknown): value is TranslationCacheReco
   const record = value as Record<string, unknown>;
   return (
     typeof record.key === 'string' &&
+    (record.videoId === undefined || typeof record.videoId === 'string') &&
     isDisplayCueArray(record.cues) &&
     isFiniteNumber(record.createdAt) &&
     isFiniteNumber(record.lastAccessedAt) &&
@@ -188,7 +196,7 @@ export class TranslationCache {
     return record.cues;
   }
 
-  async put(key: string, cues: readonly DisplayCue[]): Promise<void> {
+  async put(key: string, cues: readonly DisplayCue[], videoId?: string): Promise<void> {
     if (!isDisplayCueArray(cues)) return;
     const database = await this.open();
     const timestamp = this.now();
@@ -196,6 +204,7 @@ export class TranslationCache {
     const record: TranslationCacheRecord = {
       key,
       cues: storedCues,
+      ...(videoId ? { videoId } : {}),
       createdAt: timestamp,
       lastAccessedAt: timestamp,
       byteSize: new TextEncoder().encode(JSON.stringify(storedCues)).byteLength,
@@ -211,6 +220,44 @@ export class TranslationCache {
     const transaction = database.transaction(TRANSLATION_STORE, 'readwrite');
     transaction.objectStore(TRANSLATION_STORE).clear();
     await transactionComplete(transaction);
+  }
+
+  async clearVideo(videoId: string): Promise<number> {
+    if (!videoId) return 0;
+    const database = await this.open();
+    const readTransaction = database.transaction(TRANSLATION_STORE, 'readonly');
+    const records = await requestResult(
+      readTransaction.objectStore(TRANSLATION_STORE).getAll() as IDBRequest<unknown[]>,
+    );
+    await transactionComplete(readTransaction);
+    const keys = records.flatMap((record) =>
+      isTranslationCacheRecord(record) && record.videoId === videoId ? [record.key] : [],
+    );
+    if (keys.length === 0) return 0;
+
+    const writeTransaction = database.transaction(TRANSLATION_STORE, 'readwrite');
+    const store = writeTransaction.objectStore(TRANSLATION_STORE);
+    keys.forEach((key) => store.delete(key));
+    await transactionComplete(writeTransaction);
+    return keys.length;
+  }
+
+  async getStats(videoId?: string): Promise<TranslationCacheStats> {
+    const database = await this.open();
+    const transaction = database.transaction(TRANSLATION_STORE, 'readonly');
+    const records = await requestResult(
+      transaction.objectStore(TRANSLATION_STORE).getAll() as IDBRequest<unknown[]>,
+    );
+    await transactionComplete(transaction);
+    const matchingRecords = records.filter(
+      (record): record is TranslationCacheRecord =>
+        isTranslationCacheRecord(record) && (!videoId || record.videoId === videoId),
+    );
+    return {
+      entryCount: matchingRecords.length,
+      cueCount: matchingRecords.reduce((total, record) => total + record.cues.length, 0),
+      byteSize: matchingRecords.reduce((total, record) => total + record.byteSize, 0),
+    };
   }
 
   close(): void {

@@ -89,14 +89,34 @@ describe('TranslationCache', () => {
       indexedDb: indexedDB,
     });
 
-    await cache.put('a', [cue('a')]);
-    await cache.put('b', [cue('b')]);
+    await cache.put('a', [cue('a')], 'video-a');
+    await cache.put('b', [cue('b')], 'video-b');
     await expect(cache.get('a')).resolves.toEqual([cue('a')]);
-    await cache.put('c', [cue('c')]);
+    await cache.put('c', [cue('c')], 'video-c');
 
     await expect(cache.get('a')).resolves.toEqual([cue('a')]);
     await expect(cache.get('b')).resolves.toBeUndefined();
     await expect(cache.get('c')).resolves.toEqual([cue('c')]);
+    cache.close();
+  });
+
+  it('reports cache usage and clears one video without touching another', async () => {
+    const cache = new TranslationCache({
+      databaseName: `cueweave-test-${crypto.randomUUID()}`,
+      indexedDb: indexedDB,
+    });
+
+    await cache.put('video-a-window-1', [cue('a-1')], 'video-a');
+    await cache.put('video-a-window-2', [cue('a-2')], 'video-a');
+    await cache.put('video-b-window-1', [cue('b-1')], 'video-b');
+
+    await expect(cache.getStats('video-a')).resolves.toMatchObject({
+      entryCount: 2,
+      cueCount: 2,
+    });
+    await expect(cache.clearVideo('video-a')).resolves.toBe(2);
+    await expect(cache.getStats('video-a')).resolves.toMatchObject({ entryCount: 0 });
+    await expect(cache.getStats()).resolves.toMatchObject({ entryCount: 1, cueCount: 1 });
     cache.close();
   });
 

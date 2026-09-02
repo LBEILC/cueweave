@@ -5,11 +5,16 @@ import {
   PowerIcon,
   ShieldCheckIcon,
   SubtitlesIcon,
+  TrashIcon,
   WarningCircleIcon,
   YoutubeLogoIcon,
   type Icon,
 } from '@phosphor-icons/react';
 import { useEffect, useMemo, useState } from 'react';
+import {
+  CLEAR_TRANSLATION_CACHE_MESSAGE,
+  GET_TRANSLATION_CACHE_STATS_MESSAGE,
+} from '../../src/provider/messages';
 import {
   GET_CONTENT_STATE_MESSAGE,
   SET_CONTENT_ENABLED_MESSAGE,
@@ -82,6 +87,14 @@ function statusPresentation(view: ViewState): StatusPresentation {
         detail: view.content.message ?? '正在读取字幕轨。',
       };
     case 'ready':
+      if (view.content.displayMode === 'source') {
+        return {
+          Icon: CheckCircleIcon,
+          tone: 'success',
+          title: '原文字幕已就绪',
+          detail: view.content.message ?? '当前位置会显示整理后的原文字幕。',
+        };
+      }
       if (view.content.aiStatus === 'working') {
         return {
           Icon: CircleNotchIcon,
@@ -134,6 +147,9 @@ function statusPresentation(view: ViewState): StatusPresentation {
 export function App() {
   const [enabled, setEnabled] = useState(true);
   const [view, setView] = useState<ViewState>({ loading: true, isYouTubeVideo: false });
+  const [currentCacheEntries, setCurrentCacheEntries] = useState<number>();
+  const [cacheMessage, setCacheMessage] = useState('');
+  const [clearingCache, setClearingCache] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -157,6 +173,20 @@ export function App() {
         }
       }
 
+      let cacheEntries: number | undefined;
+      if (content?.videoId) {
+        try {
+          const result = (await browser.runtime.sendMessage({
+            type: GET_TRANSLATION_CACHE_STATS_MESSAGE,
+            videoId: content.videoId,
+          })) as { ok?: boolean; stats?: { entryCount: number } };
+          if (result.ok) cacheEntries = result.stats?.entryCount;
+        } catch {
+          cacheEntries = undefined;
+          if (!cancelled) setCacheMessage('无法读取本视频缓存');
+        }
+      }
+
       if (!cancelled) {
         setEnabled(stored[ENABLED_KEY] !== false);
         setView({
@@ -165,6 +195,7 @@ export function App() {
           ...(content ? { content } : {}),
           ...(tab?.id !== undefined ? { tabId: tab.id } : {}),
         });
+        setCurrentCacheEntries(cacheEntries);
       }
     };
 
@@ -196,6 +227,28 @@ export function App() {
     }
   };
 
+  const clearCurrentVideoCache = async () => {
+    const videoId = view.content?.videoId;
+    if (!videoId) return;
+    setClearingCache(true);
+    setCacheMessage('');
+    try {
+      const result = (await browser.runtime.sendMessage({
+        type: CLEAR_TRANSLATION_CACHE_MESSAGE,
+        videoId,
+      })) as { ok?: boolean; removedEntries?: number; message?: string };
+      if (!result.ok) throw new Error(result.message ?? '缓存未能清除。');
+      setCurrentCacheEntries(0);
+      setCacheMessage(
+        result.removedEntries ? `已清除 ${result.removedEntries} 个窗口` : '本视频没有翻译缓存',
+      );
+    } catch (error) {
+      setCacheMessage(error instanceof Error ? error.message : '缓存清除失败');
+    } finally {
+      setClearingCache(false);
+    }
+  };
+
   return (
     <main className="popup-shell">
       <div className="semantic-thread" aria-hidden="true" />
@@ -209,9 +262,11 @@ export function App() {
         <span className="mode-chip">
           {view.content?.displayMode === 'translation'
             ? '仅中文'
-            : view.content?.aiStatus === 'ready'
-              ? '双语模式'
-              : '原文降级'}
+            : view.content?.displayMode === 'source'
+              ? '仅原文'
+              : view.content?.aiStatus === 'ready'
+                ? '双语模式'
+                : '原文降级'}
         </span>
       </header>
 
@@ -262,6 +317,22 @@ export function App() {
             <dd>{view.content.languageCode?.toUpperCase() ?? '—'}</dd>
           </div>
         </dl>
+      )}
+
+      {view.content?.videoId && (
+        <div className="cache-action-row" aria-live="polite">
+          <span>{cacheMessage || `本视频缓存 ${currentCacheEntries ?? '—'} 个窗口`}</span>
+          <button
+            type="button"
+            disabled={
+              clearingCache || currentCacheEntries === undefined || currentCacheEntries === 0
+            }
+            onClick={() => void clearCurrentVideoCache()}
+          >
+            <TrashIcon size={15} aria-hidden="true" />
+            <span>{clearingCache ? '清除中' : '清除'}</span>
+          </button>
+        </div>
       )}
 
       <footer>

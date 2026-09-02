@@ -1,4 +1,6 @@
 import {
+  isClearTranslationCacheMessage,
+  isGetTranslationCacheStatsMessage,
   isTestProviderMessage,
   isTranslateWindowMessage,
   TRANSLATION_PROGRESS_MESSAGE,
@@ -26,6 +28,7 @@ import {
 const ENABLED_KEY = 'cueweave.enabled';
 const translationCache = new TranslationCache();
 const translationQueue = new TranslationQueue(2);
+let cacheGeneration = 0;
 
 async function broadcastSubtitlePreferences(preferences: SubtitlePreferences): Promise<void> {
   const tabs = await browser.tabs.query({ url: '*://www.youtube.com/*' });
@@ -118,9 +121,12 @@ async function translateWindowMessage(
         // A second cache read closes the race between identical queued requests.
       }
 
+      const writeGeneration = cacheGeneration;
       const cues = await translateTokenWindow(settings, message.tokens, onProgress);
       try {
-        await translationCache.put(cacheKey, cues);
+        if (writeGeneration === cacheGeneration) {
+          await translationCache.put(cacheKey, cues, message.context.videoId);
+        }
       } catch {
         // Cache writes are best-effort; the verified translation is still usable.
       }
@@ -188,6 +194,34 @@ export default defineBackground(() => {
             error instanceof Error
               ? error.message
               : '模型连接测试失败。请检查 Provider 设置后重试。',
+        }));
+    }
+
+    if (isGetTranslationCacheStatsMessage(message)) {
+      return translationCache
+        .getStats(message.videoId)
+        .then((stats) => ({ ok: true, stats }))
+        .catch(() => ({
+          ok: false,
+          message: '无法读取翻译缓存，请重新加载扩展后再试。',
+        }));
+    }
+
+    if (isClearTranslationCacheMessage(message)) {
+      cacheGeneration += 1;
+      return (
+        message.videoId
+          ? translationCache.clearVideo(message.videoId)
+          : translationCache.clear().then(() => undefined)
+      )
+        .then(async (removedEntries) => ({
+          ok: true,
+          removedEntries,
+          stats: await translationCache.getStats(message.videoId),
+        }))
+        .catch(() => ({
+          ok: false,
+          message: '缓存未能清除，请重新加载扩展后再试。',
         }));
     }
 

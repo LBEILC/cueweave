@@ -102,9 +102,47 @@ button {
 .status-block,
 .control-section,
 .pipeline-readout,
+.cache-action-row,
 footer {
   position: relative;
   z-index: 3;
+}
+
+.cache-action-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: -3px 0 15px;
+  color: oklch(0.58 0.025 72);
+  font-size: var(--text-caption);
+}
+
+.cache-action-row button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 30px;
+  padding: 0 8px;
+  border: 1px solid oklch(0.43 0.035 68);
+  border-radius: 2px;
+  color: oklch(0.72 0.09 68);
+  background: transparent;
+  cursor: pointer;
+}
+
+.cache-action-row button:hover:not(:disabled) {
+  border-color: oklch(0.62 0.11 68);
+}
+
+.cache-action-row button:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
+.cache-action-row button:focus-visible {
+  outline: 2px solid oklch(0.83 0.12 75 / 55%);
+  outline-offset: 2px;
 }
 
 .brand-row {
@@ -369,6 +407,10 @@ footer {
   .control-copy > p:last-child,
   footer,
   .pipeline-readout dt {
+    color: oklch(0.47 0.025 68);
+  }
+
+  .cache-action-row {
     color: oklch(0.47 0.025 68);
   }
 

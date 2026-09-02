@@ -257,6 +257,7 @@ select:focus-visible {
 
 .key-visibility:focus-visible,
 .primary-action:focus-visible,
+.secondary-danger-action:focus-visible,
 .segmented-control button:focus-visible,
 .toggle-control:focus-visible,
 input[type='range']:focus-visible {
@@ -264,7 +265,8 @@ input[type='range']:focus-visible {
   outline-offset: 3px;
 }
 
-.display-settings {
+.display-settings,
+.cache-settings {
   margin-top: clamp(56px, 8vw, 88px);
 }
 
@@ -280,6 +282,10 @@ input[type='range']:focus-visible {
   border: 1px solid oklch(0.4 0.023 68);
   border-radius: 3px;
   background: oklch(0.205 0.012 67);
+}
+
+.display-mode-control {
+  grid-template-columns: repeat(3, 1fr);
 }
 
 .segmented-control button {
@@ -445,6 +451,60 @@ input[type='range']:disabled {
   opacity: 0.68;
 }
 
+.cache-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  min-height: 96px;
+  border-bottom: 1px solid oklch(0.31 0.016 67);
+}
+
+.cache-summary {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.cache-summary > svg {
+  color: oklch(0.66 0.045 70);
+}
+
+.cache-summary div {
+  display: grid;
+  gap: 5px;
+}
+
+.cache-summary span {
+  color: oklch(0.61 0.023 72);
+  font-size: 0.75rem;
+}
+
+.secondary-danger-action {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 0 14px;
+  border: 1px solid oklch(0.5 0.08 32);
+  border-radius: 2px;
+  color: oklch(0.79 0.1 38);
+  background: oklch(0.225 0.014 67);
+  cursor: pointer;
+}
+
+.secondary-danger-action:hover:not(:disabled) {
+  border-color: oklch(0.64 0.13 32);
+  background: oklch(0.27 0.025 40);
+}
+
+.secondary-danger-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.46;
+}
+
 .form-message {
   display: flex;
   align-items: center;
@@ -514,7 +574,8 @@ input[type='range']:disabled {
   }
 
   .form-actions,
-  .display-actions {
+  .display-actions,
+  .cache-panel {
     align-items: stretch;
     flex-direction: column;
   }
@@ -556,6 +617,10 @@ input[type='range']:disabled {
     color: oklch(0.46 0.027 68);
   }
 
+  .cache-summary span {
+    color: oklch(0.46 0.027 68);
+  }
+
   input:not([type='range']),
   select,
   .form-message {
@@ -577,6 +642,10 @@ input[type='range']:disabled {
   .toggle-control {
     border-color: oklch(0.72 0.035 70);
     color: oklch(0.38 0.025 68);
+    background: oklch(0.98 0.01 78);
+  }
+
+  .secondary-danger-action {
     background: oklch(0.98 0.01 78);
   }
 }
