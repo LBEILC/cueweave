@@ -127,7 +127,7 @@ API Key 不进入缓存键。设置和小型索引放在 `chrome.storage.local`�
 
 ## OpenAI 兼容协议
 
-Provider 设置可固定为 Chat Completions、Responses，或使用自动检测。自动模式先请求 Chat Completions，只在端点不存在或响应无法解析时回退 Responses；认证、限流、超时和普通网络错误不会触发跨协议重复请求。CLIProxyAPI 等本机代理可直接固定为 Responses。第三方代理的账户认证由代理自行管理，CueWeave 只保存它对本机客户端签发的访问 Key。详细边界见 [CLIProxyAPI 连接说明](CLIPROXYAPI.md)。
+Provider 设置可固定为 Chat Completions、Responses，或使用自动检测。自动模式先请求 Chat Completions，只在端点不存在或响应无法解析时回退 Responses；认证、限流、超时和普通网络错误不会触发跨协议重复请求。
 
 ## 权限与安全边界
 

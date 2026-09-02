@@ -44,8 +44,6 @@ npm test
 
 这个流程只加载本地构建，不需要 API Key。字幕读取失败时，先确认视频本身存在字幕轨，再刷新视频页面并查看 Popup 中的具体状态。
 
-如需连接用户自行运行的本机 CLIProxyAPI，参阅 [CLIProxyAPI 连接说明](CLIPROXYAPI.md)。开发和自动化测试不依赖该第三方服务，也不读取其 OAuth 文件。
-
 ## 打包
 
 ```bash

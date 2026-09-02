@@ -79,20 +79,6 @@ export function App() {
     setMessage('');
   };
 
-  const applyCliProxyPreset = () => {
-    setSettings((current) => ({
-      ...current,
-      baseUrl: 'http://127.0.0.1:8317/v1',
-      model:
-        current.model === DEFAULT_PROVIDER_SETTINGS.model || !current.model.trim()
-          ? 'gpt-5.6'
-          : current.model,
-      protocol: 'responses',
-    }));
-    setSaveState('idle');
-    setMessage('已填入 CLIProxyAPI 本机预设。请填写代理访问 Key，并确认模型名称可用。');
-  };
-
   const updateSubtitle = <Key extends keyof SubtitlePreferences>(
     key: Key,
     value: SubtitlePreferences[Key],
@@ -182,16 +168,6 @@ export function App() {
             void saveAndTest();
           }}
         >
-          <div className="provider-preset">
-            <div>
-              <strong>使用本机 CLIProxyAPI</strong>
-              <span>扩展只连接本机代理；ChatGPT OAuth 仍由 CLIProxyAPI 自己管理。</span>
-            </div>
-            <button type="button" onClick={applyCliProxyPreset}>
-              填入本机预设
-            </button>
-          </div>
-
           <label className="field-row">
             <span className="field-icon" aria-hidden="true">
               <LinkSimpleIcon size={19} />
@@ -216,7 +192,7 @@ export function App() {
             </span>
             <span className="field-copy">
               <span className="field-label">请求格式</span>
-              <span className="field-help">不确定时自动检测；Codex OAuth 建议 Responses</span>
+              <span className="field-help">不确定时使用自动检测</span>
             </span>
             <select
               value={settings.protocol}
@@ -252,9 +228,7 @@ export function App() {
             </span>
             <span className="field-copy">
               <span className="field-label">API Key</span>
-              <span className="field-help">
-                填 Provider 或本机代理的访问 Key，不填 ChatGPT 登录凭据
-              </span>
+              <span className="field-help">填写模型服务提供商签发的访问 Key</span>
             </span>
             <span className="key-input">
               <input
