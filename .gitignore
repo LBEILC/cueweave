@@ -1,0 +1,25 @@
+# Dependencies and build output
+node_modules/
+.wxt/
+.output/
+dist/
+coverage/
+playwright-report/
+test-results/
+
+# Local settings and secrets
+.env
+.env.*
+!.env.example
+*.local
+
+# Editor and operating-system files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Logs and temporary files
+*.log
+*.tmp
+*.swp
