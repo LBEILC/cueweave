@@ -174,7 +174,7 @@ export class TranslationCache {
     this.indexedDb = options.indexedDb ?? indexedDB;
   }
 
-  async get(key: string): Promise<DisplayCue[] | undefined> {
+  async get(key: string, videoId?: string): Promise<DisplayCue[] | undefined> {
     const database = await this.open();
     const transaction = database.transaction(TRANSLATION_STORE, 'readonly');
     const record = await requestResult(
@@ -190,6 +190,7 @@ export class TranslationCache {
     const writeTransaction = database.transaction(TRANSLATION_STORE, 'readwrite');
     writeTransaction.objectStore(TRANSLATION_STORE).put({
       ...record,
+      ...(!record.videoId && videoId ? { videoId } : {}),
       lastAccessedAt: this.now(),
     });
     await transactionComplete(writeTransaction);

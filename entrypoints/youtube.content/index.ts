@@ -39,7 +39,7 @@ import {
 } from '../../src/settings/subtitle';
 
 const OVERLAY_ID = 'cueweave-subtitle-overlay';
-const CONTENT_BUILD_MARKER = 'spa-innertube-v1';
+const CONTENT_BUILD_MARKER = 'cache-migration-v1';
 const PREFETCH_WINDOW_COUNT = 3;
 
 type WindowTranslationStatus = 'working' | 'ready' | 'failed';

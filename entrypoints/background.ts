@@ -107,7 +107,7 @@ async function translateWindowMessage(
     });
 
     try {
-      const cachedCues = await translationCache.get(cacheKey);
+      const cachedCues = await translationCache.get(cacheKey, message.context.videoId);
       if (cachedCues) return { ok: true, cues: cachedCues, cacheHit: true };
     } catch {
       // IndexedDB failure must not block live translation.
@@ -115,7 +115,7 @@ async function translateWindowMessage(
 
     return await translationQueue.enqueue(cacheKey, message.priority, async () => {
       try {
-        const cachedCues = await translationCache.get(cacheKey);
+        const cachedCues = await translationCache.get(cacheKey, message.context.videoId);
         if (cachedCues) return { ok: true, cues: cachedCues, cacheHit: true } as const;
       } catch {
         // A second cache read closes the race between identical queued requests.

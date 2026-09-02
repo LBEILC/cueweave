@@ -120,6 +120,22 @@ describe('TranslationCache', () => {
     cache.close();
   });
 
+  it('backfills the video id when an older cache record is read', async () => {
+    const cache = new TranslationCache({
+      databaseName: `cueweave-test-${crypto.randomUUID()}`,
+      indexedDb: indexedDB,
+    });
+
+    await cache.put('legacy-window', [cue('legacy')]);
+    await expect(cache.getStats('video-a')).resolves.toMatchObject({ entryCount: 0 });
+    await expect(cache.get('legacy-window', 'video-a')).resolves.toEqual([cue('legacy')]);
+    await expect(cache.getStats('video-a')).resolves.toMatchObject({
+      entryCount: 1,
+      cueCount: 1,
+    });
+    cache.close();
+  });
+
   it('ignores unverified cue arrays', async () => {
     const cache = new TranslationCache({
       databaseName: `cueweave-test-${crypto.randomUUID()}`,
