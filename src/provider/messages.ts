@@ -1,4 +1,4 @@
-import type { DisplayCue, SourceToken } from '../domain/subtitle';
+import type { DisplayCue, SourceToken, TranslationTerm } from '../domain/subtitle';
 import type { ProviderFailure, ProviderTestResult } from './types';
 
 export const TEST_PROVIDER_MESSAGE = 'cueweave:test-provider';
@@ -7,6 +7,9 @@ export const TRANSLATION_PROGRESS_MESSAGE = 'cueweave:translation-progress';
 export const CANCEL_TRANSLATION_SESSION_MESSAGE = 'cueweave:cancel-translation-session';
 export const GET_TRANSLATION_CACHE_STATS_MESSAGE = 'cueweave:get-translation-cache-stats';
 export const CLEAR_TRANSLATION_CACHE_MESSAGE = 'cueweave:clear-translation-cache';
+export const GET_VIDEO_GLOSSARY_MESSAGE = 'cueweave:get-video-glossary';
+export const UPSERT_VIDEO_GLOSSARY_TERM_MESSAGE = 'cueweave:upsert-video-glossary-term';
+export const DELETE_VIDEO_GLOSSARY_TERM_MESSAGE = 'cueweave:delete-video-glossary-term';
 
 export type TranslationPriority = 'current' | 'prefetch';
 export type TranslationProgressStage = 'translating' | 'repairing-boundaries' | 'repairing-output';
@@ -74,6 +77,77 @@ export interface GetTranslationCacheStatsMessage {
 export interface ClearTranslationCacheMessage {
   type: typeof CLEAR_TRANSLATION_CACHE_MESSAGE;
   videoId?: string;
+}
+
+export interface GetVideoGlossaryMessage {
+  type: typeof GET_VIDEO_GLOSSARY_MESSAGE;
+  videoId: string;
+}
+
+export interface UpsertVideoGlossaryTermMessage {
+  type: typeof UPSERT_VIDEO_GLOSSARY_TERM_MESSAGE;
+  videoId: string;
+  term: TranslationTerm;
+}
+
+export interface DeleteVideoGlossaryTermMessage {
+  type: typeof DELETE_VIDEO_GLOSSARY_TERM_MESSAGE;
+  videoId: string;
+  source: string;
+}
+
+function validGlossaryVideoId(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0 && value.length <= 64;
+}
+
+function validGlossaryText(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0 && value.trim().length <= 96;
+}
+
+export function isGetVideoGlossaryMessage(value: unknown): value is GetVideoGlossaryMessage {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'type' in value &&
+    value.type === GET_VIDEO_GLOSSARY_MESSAGE &&
+    'videoId' in value &&
+    validGlossaryVideoId(value.videoId)
+  );
+}
+
+export function isUpsertVideoGlossaryTermMessage(
+  value: unknown,
+): value is UpsertVideoGlossaryTermMessage {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'type' in value &&
+    value.type === UPSERT_VIDEO_GLOSSARY_TERM_MESSAGE &&
+    'videoId' in value &&
+    validGlossaryVideoId(value.videoId) &&
+    'term' in value &&
+    typeof value.term === 'object' &&
+    value.term !== null &&
+    'source' in value.term &&
+    validGlossaryText(value.term.source) &&
+    'translation' in value.term &&
+    validGlossaryText(value.term.translation)
+  );
+}
+
+export function isDeleteVideoGlossaryTermMessage(
+  value: unknown,
+): value is DeleteVideoGlossaryTermMessage {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'type' in value &&
+    value.type === DELETE_VIDEO_GLOSSARY_TERM_MESSAGE &&
+    'videoId' in value &&
+    validGlossaryVideoId(value.videoId) &&
+    'source' in value &&
+    validGlossaryText(value.source)
+  );
 }
 
 export function isGetTranslationCacheStatsMessage(

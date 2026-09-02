@@ -1,12 +1,18 @@
 import type { TranslationTerm } from '../domain/subtitle';
 
-const VIDEO_GLOSSARIES_KEY = 'cueweave.video-glossaries-v2';
+const VIDEO_GLOSSARIES_KEY = 'cueweave.video-glossaries-v3';
 const MAX_VIDEOS = 80;
 const MAX_TERMS_PER_VIDEO = 80;
 
 interface StoredVideoGlossary {
   terms: TranslationTerm[];
+  manualTerms: TranslationTerm[];
   updatedAt: number;
+}
+
+export interface VideoGlossaryState {
+  terms: TranslationTerm[];
+  manualTerms: TranslationTerm[];
 }
 
 type StoredVideoGlossaries = Record<string, StoredVideoGlossary>;
@@ -31,11 +37,18 @@ function parseGlossaries(value: unknown): StoredVideoGlossaries {
       const terms = Array.isArray(record.terms)
         ? record.terms.flatMap((term) => sanitizeTerm(term) ?? []).slice(0, MAX_TERMS_PER_VIDEO)
         : [];
+      const manualTerms = Array.isArray(record.manualTerms)
+        ? record.manualTerms
+            .flatMap((term) => sanitizeTerm(term) ?? [])
+            .slice(0, MAX_TERMS_PER_VIDEO)
+        : [];
       const updatedAt =
         typeof record.updatedAt === 'number' && Number.isFinite(record.updatedAt)
           ? record.updatedAt
           : 0;
-      return terms.length > 0 ? [[videoId, { terms, updatedAt }]] : [];
+      return terms.length > 0 || manualTerms.length > 0
+        ? [[videoId, { terms, manualTerms, updatedAt }]]
+        : [];
     }),
   );
 }
@@ -46,8 +59,20 @@ async function readGlossaries(): Promise<StoredVideoGlossaries> {
 }
 
 export async function readVideoGlossary(videoId: string): Promise<TranslationTerm[]> {
-  if (!videoId) return [];
-  return (await readGlossaries())[videoId]?.terms ?? [];
+  const state = await readVideoGlossaryState(videoId);
+  const termsBySource = new Map(state.terms.map((term) => [term.source.toLocaleLowerCase(), term]));
+  for (const term of state.manualTerms) {
+    termsBySource.set(term.source.toLocaleLowerCase(), term);
+  }
+  return [...termsBySource.values()];
+}
+
+export async function readVideoGlossaryState(videoId: string): Promise<VideoGlossaryState> {
+  if (!videoId) return { terms: [], manualTerms: [] };
+  const glossary = (await readGlossaries())[videoId];
+  return glossary
+    ? { terms: glossary.terms, manualTerms: glossary.manualTerms }
+    : { terms: [], manualTerms: [] };
 }
 
 export function mergeVideoGlossary(
@@ -57,15 +82,21 @@ export function mergeVideoGlossary(
   if (!videoId || incomingTerms.length === 0) return Promise.resolve();
   const operation = writeChain.then(async () => {
     const glossaries = await readGlossaries();
+    const manualSources = new Set(
+      (glossaries[videoId]?.manualTerms ?? []).map((term) => term.source.toLocaleLowerCase()),
+    );
     const termsBySource = new Map(
       (glossaries[videoId]?.terms ?? []).map((term) => [term.source.toLocaleLowerCase(), term]),
     );
     for (const candidate of incomingTerms) {
       const term = sanitizeTerm(candidate);
-      if (term) termsBySource.set(term.source.toLocaleLowerCase(), term);
+      if (term && !manualSources.has(term.source.toLocaleLowerCase())) {
+        termsBySource.set(term.source.toLocaleLowerCase(), term);
+      }
     }
     glossaries[videoId] = {
       terms: [...termsBySource.values()].slice(-MAX_TERMS_PER_VIDEO),
+      manualTerms: glossaries[videoId]?.manualTerms ?? [],
       updatedAt: Date.now(),
     };
 
@@ -78,6 +109,64 @@ export function mergeVideoGlossary(
   });
   writeChain = operation.catch(() => undefined);
   return operation;
+}
+
+export function upsertManualVideoGlossaryTerm(
+  videoId: string,
+  candidate: TranslationTerm,
+): Promise<void> {
+  const term = sanitizeTerm(candidate);
+  if (!videoId || !term) return Promise.reject(new Error('术语内容无效。'));
+  const operation = writeChain.then(async () => {
+    const glossaries = await readGlossaries();
+    const sourceKey = term.source.toLocaleLowerCase();
+    const manualTerms = new Map(
+      (glossaries[videoId]?.manualTerms ?? []).map((item) => [
+        item.source.toLocaleLowerCase(),
+        item,
+      ]),
+    );
+    manualTerms.set(sourceKey, term);
+    glossaries[videoId] = {
+      terms: (glossaries[videoId]?.terms ?? []).filter(
+        (item) => item.source.toLocaleLowerCase() !== sourceKey,
+      ),
+      manualTerms: [...manualTerms.values()].slice(-MAX_TERMS_PER_VIDEO),
+      updatedAt: Date.now(),
+    };
+    await retainAndWriteGlossaries(glossaries);
+  });
+  writeChain = operation.catch(() => undefined);
+  return operation;
+}
+
+export function deleteManualVideoGlossaryTerm(videoId: string, source: string): Promise<void> {
+  const sourceKey = source.trim().toLocaleLowerCase();
+  if (!videoId || !sourceKey) return Promise.reject(new Error('术语内容无效。'));
+  const operation = writeChain.then(async () => {
+    const glossaries = await readGlossaries();
+    const glossary = glossaries[videoId];
+    if (!glossary) return;
+    glossary.manualTerms = glossary.manualTerms.filter(
+      (term) => term.source.toLocaleLowerCase() !== sourceKey,
+    );
+    glossary.updatedAt = Date.now();
+    if (glossary.terms.length === 0 && glossary.manualTerms.length === 0) {
+      delete glossaries[videoId];
+    }
+    await retainAndWriteGlossaries(glossaries);
+  });
+  writeChain = operation.catch(() => undefined);
+  return operation;
+}
+
+async function retainAndWriteGlossaries(glossaries: StoredVideoGlossaries): Promise<void> {
+  const retained = Object.fromEntries(
+    Object.entries(glossaries)
+      .sort(([, left], [, right]) => right.updatedAt - left.updatedAt)
+      .slice(0, MAX_VIDEOS),
+  );
+  await browser.storage.local.set({ [VIDEO_GLOSSARIES_KEY]: retained });
 }
 
 export function clearVideoGlossary(videoId?: string): Promise<void> {

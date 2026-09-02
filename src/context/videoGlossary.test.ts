@@ -1,5 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { clearVideoGlossary, mergeVideoGlossary, readVideoGlossary } from './videoGlossary';
+import {
+  clearVideoGlossary,
+  deleteManualVideoGlossaryTerm,
+  mergeVideoGlossary,
+  readVideoGlossary,
+  readVideoGlossaryState,
+  upsertManualVideoGlossaryTerm,
+} from './videoGlossary';
 
 let storageState: Record<string, unknown>;
 
@@ -42,6 +49,29 @@ describe('video glossary', () => {
     expect(await readVideoGlossary('video-a')).toEqual([]);
     expect(await readVideoGlossary('video-b')).toEqual([
       { source: 'Gemini', translation: 'Gemini' },
+    ]);
+  });
+
+  it('lets a confirmed manual term override automatic terminology', async () => {
+    await mergeVideoGlossary('video-a', [{ source: 'Soul', translation: '灵魂' }]);
+    await upsertManualVideoGlossaryTerm('video-a', { source: ' Soul ', translation: ' Sol ' });
+    await mergeVideoGlossary('video-a', [{ source: 'soul', translation: 'Astra' }]);
+
+    expect(await readVideoGlossary('video-a')).toEqual([{ source: 'Soul', translation: 'Sol' }]);
+    expect(await readVideoGlossaryState('video-a')).toEqual({
+      terms: [],
+      manualTerms: [{ source: 'Soul', translation: 'Sol' }],
+    });
+  });
+
+  it('deletes only the selected manual term', async () => {
+    await upsertManualVideoGlossaryTerm('video-a', { source: 'Soul', translation: 'Sol' });
+    await upsertManualVideoGlossaryTerm('video-a', { source: 'Astro', translation: 'Astra' });
+
+    await deleteManualVideoGlossaryTerm('video-a', 'soul');
+
+    expect((await readVideoGlossaryState('video-a')).manualTerms).toEqual([
+      { source: 'Astro', translation: 'Astra' },
     ]);
   });
 });

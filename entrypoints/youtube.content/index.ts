@@ -22,6 +22,7 @@ import {
   GET_CONTENT_SETTINGS_MESSAGE,
   GET_CONTENT_STATE_MESSAGE,
   GET_TRANSCRIPT_REPORT_MESSAGE,
+  REFRESH_VIDEO_TRANSLATIONS_MESSAGE,
   SET_CONTENT_ENABLED_MESSAGE,
   SET_SUBTITLE_PREFERENCES_MESSAGE,
   START_FULL_TRANSLATION_MESSAGE,
@@ -44,7 +45,7 @@ import {
 } from '../../src/settings/subtitle';
 
 const OVERLAY_ID = 'cueweave-subtitle-overlay';
-const CONTENT_BUILD_MARKER = 'proper-noun-grounding-v1';
+const CONTENT_BUILD_MARKER = 'manual-glossary-v1';
 const PREFETCH_WINDOW_COUNT = 3;
 
 type WindowTranslationStatus = 'working' | 'ready' | 'failed';
@@ -96,6 +97,25 @@ function rotateTranslationSession(): void {
       sessionId: previousSessionId,
     })
     .catch(() => undefined);
+}
+
+function resetTranslatedResults(message?: string): void {
+  rotateTranslationSession();
+  translatedCues = [];
+  windowStates.clear();
+  windowRetryAfterMs.clear();
+  focusedWindowId = '';
+  translationFocusVersion += 1;
+  fullTranslationStatus = 'idle';
+  fullTranslationMessage = '';
+  fullTranslationJob = undefined;
+  updateTranslationMetrics();
+  updateState({
+    aiStatus: 'idle',
+    aiMessage: message,
+    correctionCount: 0,
+    fullTranslationStatus: 'idle',
+  });
 }
 
 function updateState(patch: Partial<ContentState>): void {
@@ -912,6 +932,23 @@ export default defineContentScript({
         typeof message === 'object' &&
         message !== null &&
         'type' in message &&
+        message.type === REFRESH_VIDEO_TRANSLATIONS_MESSAGE &&
+        'videoId' in message &&
+        typeof message.videoId === 'string'
+      ) {
+        if (message.videoId !== state.videoId)
+          return Promise.resolve({ ok: true, refreshed: false });
+        resetTranslatedResults('术语已更新，正在重新翻译当前位置。');
+        const video = document.querySelector<HTMLVideoElement>('video.html5-main-video');
+        if (state.enabled && video && subtitlePreferences.displayMode !== 'source') {
+          void ensureTranslatedWindow(video.currentTime * 1_000, true);
+        }
+        return Promise.resolve({ ok: true, refreshed: true });
+      }
+      if (
+        typeof message === 'object' &&
+        message !== null &&
+        'type' in message &&
         message.type === TRANSLATION_PROGRESS_MESSAGE &&
         'windowId' in message &&
         typeof message.windowId === 'string' &&
@@ -999,7 +1036,7 @@ export default defineContentScript({
         const switchingToSource =
           subtitlePreferences.displayMode !== 'source' && nextPreferences.displayMode === 'source';
         subtitlePreferences = nextPreferences;
-        if (correctionSettingChanged || switchingToSource) {
+        if (switchingToSource && !correctionSettingChanged) {
           rotateTranslationSession();
         }
         if (switchingToSource) {
@@ -1008,12 +1045,7 @@ export default defineContentScript({
           });
         }
         if (correctionSettingChanged) {
-          translatedCues = [];
-          windowStates.clear();
-          windowRetryAfterMs.clear();
-          fullTranslationStatus = 'idle';
-          fullTranslationMessage = '';
-          updateTranslationMetrics();
+          resetTranslatedResults();
         }
         updateState({ displayMode: subtitlePreferences.displayMode });
         const host = document.getElementById(OVERLAY_ID);

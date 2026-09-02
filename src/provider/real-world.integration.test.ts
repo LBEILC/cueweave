@@ -107,9 +107,41 @@ describe('real subtitle model integration', () => {
       expect(source).toContain('Astra');
       expect(source).not.toContain('GPT-4o');
       expect(translation).not.toContain('GPT-4o');
+      expect(translation).toContain('Soul');
       expect(cues.flatMap((cue) => cue.terminology ?? []).map((term) => term.source)).not.toContain(
         'GPT-4o',
       );
+    },
+    120_000,
+  );
+
+  it.runIf(Boolean(apiKey))(
+    'applies a confirmed Soul to Sol mapping to the real subtitle window',
+    async () => {
+      vi.stubGlobal('browser', { permissions: { contains: vi.fn().mockResolvedValue(true) } });
+      expect(astraWindow).toBeDefined();
+
+      const cues = await translateTokenWindow(
+        {
+          baseUrl: 'https://api.gpt.ge/v1',
+          apiKey,
+          model: 'gemini-3.1-flash-lite',
+          protocol: 'chat-completions',
+        },
+        astraWindow!.tokens,
+        undefined,
+        undefined,
+        {
+          transcriptEvidence: ['Astra'],
+          terminology: [{ source: 'Soul', translation: 'Sol' }],
+        },
+      );
+      const source = cues.map((cue) => cue.sourceText).join(' ');
+      const translation = cues.map((cue) => cue.translation).join(' ');
+
+      expect(source).toContain('versions of Sol');
+      expect(translation).toContain('Sol');
+      expect(translation).not.toMatch(/\bSoul\b/u);
     },
     120_000,
   );

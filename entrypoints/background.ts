@@ -1,9 +1,12 @@
 import {
   isCancelTranslationSessionMessage,
   isClearTranslationCacheMessage,
+  isDeleteVideoGlossaryTermMessage,
   isGetTranslationCacheStatsMessage,
+  isGetVideoGlossaryMessage,
   isTestProviderMessage,
   isTranslateWindowMessage,
+  isUpsertVideoGlossaryTermMessage,
   TRANSLATION_PROGRESS_MESSAGE,
   type TranslateWindowMessage,
   type TranslateWindowResult,
@@ -18,11 +21,14 @@ import { createTranslationCacheKey, TranslationCache } from '../src/cache/transl
 import { TranslationQueue } from '../src/provider/translationQueue';
 import {
   clearVideoGlossary,
+  deleteManualVideoGlossaryTerm,
   mergeVideoGlossary,
-  readVideoGlossary,
+  readVideoGlossaryState,
+  upsertManualVideoGlossaryTerm,
 } from '../src/context/videoGlossary';
 import {
   GET_CONTENT_SETTINGS_MESSAGE,
+  REFRESH_VIDEO_TRANSLATIONS_MESSAGE,
   SET_SUBTITLE_PREFERENCES_MESSAGE,
   UPDATE_SUBTITLE_PREFERENCES_MESSAGE,
 } from '../src/platform/youtube/types';
@@ -52,6 +58,28 @@ async function broadcastSubtitlePreferences(preferences: SubtitlePreferences): P
           ],
     ),
   );
+}
+
+async function broadcastVideoTranslationRefresh(videoId: string): Promise<void> {
+  const tabs = await browser.tabs.query({ url: '*://www.youtube.com/*' });
+  await Promise.allSettled(
+    tabs.flatMap((tab) =>
+      tab.id === undefined
+        ? []
+        : [
+            browser.tabs.sendMessage(tab.id, {
+              type: REFRESH_VIDEO_TRANSLATIONS_MESSAGE,
+              videoId,
+            }),
+          ],
+    ),
+  );
+}
+
+async function refreshVideoAfterGlossaryChange(videoId: string): Promise<void> {
+  cacheGeneration += 1;
+  await translationCache.clearVideo(videoId).catch(() => undefined);
+  await broadcastVideoTranslationRefresh(videoId);
 }
 
 function validTranslationTokens(tokens: unknown[]): boolean {
@@ -127,7 +155,17 @@ async function translateWindowMessage(
 
   try {
     const settings = await readProviderSettings();
-    const terminology = await readVideoGlossary(message.context.videoId).catch(() => []);
+    const glossary = await readVideoGlossaryState(message.context.videoId).catch(() => ({
+      terms: [],
+      manualTerms: [],
+    }));
+    const terminologyBySource = new Map(
+      glossary.terms.map((term) => [term.source.toLocaleLowerCase(), term]),
+    );
+    for (const term of glossary.manualTerms) {
+      terminologyBySource.set(term.source.toLocaleLowerCase(), term);
+    }
+    const terminology = [...terminologyBySource.values()];
     const cacheKey = await createTranslationCacheKey({
       ...message.context,
       baseUrl: settings.baseUrl,
@@ -144,6 +182,7 @@ async function translateWindowMessage(
       ...(message.context.transcriptEvidence
         ? { transcriptEvidence: message.context.transcriptEvidence }
         : {}),
+      manualTerminology: glossary.manualTerms,
       correctionEnabled: message.context.correctionEnabled,
     });
 
@@ -307,6 +346,30 @@ export default defineBackground(() => {
           ok: false,
           message: '缓存未能清除，请重新加载扩展后再试。',
         }));
+    }
+
+    if (isGetVideoGlossaryMessage(message)) {
+      return readVideoGlossaryState(message.videoId)
+        .then((glossary) => ({ ok: true, glossary }))
+        .catch(() => ({ ok: false, message: '无法读取当前视频术语。' }));
+    }
+
+    if (isUpsertVideoGlossaryTermMessage(message)) {
+      return upsertManualVideoGlossaryTerm(message.videoId, message.term)
+        .then(async () => {
+          await refreshVideoAfterGlossaryChange(message.videoId);
+          return { ok: true, glossary: await readVideoGlossaryState(message.videoId) };
+        })
+        .catch(() => ({ ok: false, message: '术语未能保存，请重新加载扩展后再试。' }));
+    }
+
+    if (isDeleteVideoGlossaryTermMessage(message)) {
+      return deleteManualVideoGlossaryTerm(message.videoId, message.source)
+        .then(async () => {
+          await refreshVideoAfterGlossaryChange(message.videoId);
+          return { ok: true, glossary: await readVideoGlossaryState(message.videoId) };
+        })
+        .catch(() => ({ ok: false, message: '术语未能删除，请重新加载扩展后再试。' }));
     }
 
     if (isTranslateWindowMessage(message)) {

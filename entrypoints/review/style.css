@@ -135,6 +135,7 @@ button {
 }
 .progress-section,
 .correction-section,
+.terminology-section,
 .export-section {
   margin-top: clamp(50px, 8vw, 78px);
 }
@@ -264,6 +265,93 @@ button {
   font-weight: 600;
 }
 
+.term-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 18px 12px;
+  align-items: end;
+  padding-top: 26px;
+}
+.term-form label {
+  display: grid;
+  gap: 9px;
+  min-width: 0;
+}
+.term-form label > span {
+  color: oklch(0.61 0.023 72);
+  font-size: 0.75rem;
+}
+.term-form input {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 13px;
+  border: 1px solid oklch(0.4 0.023 68);
+  border-radius: 2px;
+  color: inherit;
+  background: oklch(0.205 0.012 67);
+  font: inherit;
+}
+.term-form input::placeholder {
+  color: oklch(0.5 0.025 72);
+}
+.term-arrow {
+  align-self: end;
+  display: grid;
+  place-items: center;
+  min-height: 44px;
+  color: oklch(0.72 0.16 68);
+}
+.term-form .primary-action {
+  grid-column: 1 / -1;
+  justify-self: end;
+}
+.compact-empty {
+  margin-top: 24px;
+}
+.term-list {
+  display: grid;
+  margin: 24px 0 0;
+  padding: 0;
+  border-top: 1px solid oklch(0.31 0.016 67);
+  list-style: none;
+}
+.term-list li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto;
+  gap: 13px;
+  align-items: center;
+  min-width: 0;
+  padding: 14px 0;
+  border-bottom: 1px solid oklch(0.31 0.016 67);
+  overflow-wrap: anywhere;
+}
+.term-list li > span:nth-child(2) {
+  color: oklch(0.72 0.16 68);
+}
+.term-list button {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border: 0;
+  color: oklch(0.61 0.04 35);
+  background: transparent;
+  cursor: pointer;
+}
+.term-list button:hover {
+  color: oklch(0.72 0.12 35);
+}
+.term-list button:disabled {
+  cursor: wait;
+  opacity: 0.5;
+}
+.term-message {
+  margin: 18px 0 0;
+  color: oklch(0.72 0.06 75);
+  line-height: 1.55;
+}
+
 .export-controls {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(160px, 0.42fr);
@@ -336,7 +424,8 @@ legend {
   color: oklch(0.72 0.06 75);
 }
 button:focus-visible,
-a:focus-visible {
+a:focus-visible,
+input:focus-visible {
   outline: 3px solid oklch(0.82 0.13 75 / 0.55);
   outline-offset: 3px;
 }
@@ -369,6 +458,16 @@ a:focus-visible {
   }
   .export-controls {
     grid-template-columns: 1fr;
+  }
+  .term-form {
+    grid-template-columns: 1fr;
+  }
+  .term-arrow {
+    display: none;
+  }
+  .term-form .primary-action {
+    grid-column: auto;
+    justify-self: stretch;
   }
   .segmented-control.four-options {
     grid-template-columns: repeat(2, 1fr);
@@ -413,6 +512,16 @@ a:focus-visible {
   .segmented-control {
     border-color: oklch(0.72 0.035 70);
     background: oklch(0.9 0.018 76);
+  }
+  .term-form input {
+    border-color: oklch(0.72 0.035 70);
+    background: oklch(0.98 0.01 78);
+  }
+  .term-list {
+    border-color: oklch(0.82 0.026 72);
+  }
+  .term-list li {
+    border-color: oklch(0.82 0.026 72);
   }
   .segmented-control button[aria-pressed='true'] {
     color: oklch(0.22 0.025 67);

@@ -1,4 +1,4 @@
-import type { DisplayCue, SourceToken } from '../domain/subtitle';
+import type { DisplayCue, SourceToken, TranslationTerm } from '../domain/subtitle';
 import type { ProviderProtocol } from '../provider/types';
 
 const DEFAULT_DATABASE_NAME = 'cueweave-cache';
@@ -23,6 +23,7 @@ export interface TranslationCacheIdentity {
   channelName?: string;
   videoDescription?: string;
   transcriptEvidence?: readonly string[];
+  manualTerminology?: readonly TranslationTerm[];
   correctionEnabled?: boolean;
 }
 
@@ -157,6 +158,7 @@ function canonicalCacheInput(identity: TranslationCacheIdentity): string {
     channelName: identity.channelName ?? '',
     videoDescription: identity.videoDescription ?? '',
     transcriptEvidence: identity.transcriptEvidence ?? [],
+    manualTerminology: identity.manualTerminology ?? [],
     correctionEnabled: identity.correctionEnabled !== false,
     tokens: identity.tokens.map((token) => ({
       id: token.id,

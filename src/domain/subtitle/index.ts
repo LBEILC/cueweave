@@ -5,7 +5,7 @@ export { processSubtitleCues } from './pipeline';
 export { segmentCues } from './segment';
 export { buildSourceTokens, createLocalDisplayCues, createTokenWindows } from './tokens';
 export { serializeSubtitles, subtitleExportFilename } from './export';
-export { extractTranscriptEvidenceTerms } from './evidence';
+export { extractTranscriptEvidenceTerms, extractUnitTechnicalEntities } from './evidence';
 export type { SubtitleExportFormat, SubtitleExportMode } from './export';
 export type {
   DisplayCue,

@@ -4,6 +4,9 @@ import {
   DownloadSimpleIcon,
   FileTextIcon,
   MagicWandIcon,
+  PlusIcon,
+  TextAaIcon,
+  TrashSimpleIcon,
   WarningCircleIcon,
 } from '@phosphor-icons/react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -13,6 +16,12 @@ import {
   type SubtitleExportFormat,
   type SubtitleExportMode,
 } from '../../src/domain/subtitle';
+import type { VideoGlossaryState } from '../../src/context/videoGlossary';
+import {
+  DELETE_VIDEO_GLOSSARY_TERM_MESSAGE,
+  GET_VIDEO_GLOSSARY_MESSAGE,
+  UPSERT_VIDEO_GLOSSARY_TERM_MESSAGE,
+} from '../../src/provider/messages';
 import {
   GET_TRANSCRIPT_REPORT_MESSAGE,
   START_FULL_TRANSLATION_MESSAGE,
@@ -21,6 +30,12 @@ import {
 import { readSubtitlePreferences } from '../../src/settings/subtitle';
 
 type LoadState = 'loading' | 'ready' | 'error';
+
+interface GlossaryResponse {
+  ok: boolean;
+  glossary?: VideoGlossaryState;
+  message?: string;
+}
 
 const MODE_LABELS: Record<SubtitleExportMode, string> = {
   original: '原始转录',
@@ -52,6 +67,11 @@ export function App() {
   const [exportMode, setExportMode] = useState<SubtitleExportMode>('original');
   const [exportFormat, setExportFormat] = useState<SubtitleExportFormat>('srt');
   const [exportMessage, setExportMessage] = useState('');
+  const [glossary, setGlossary] = useState<VideoGlossaryState>({ terms: [], manualTerms: [] });
+  const [sourceTerm, setSourceTerm] = useState('');
+  const [confirmedTerm, setConfirmedTerm] = useState('');
+  const [termMessage, setTermMessage] = useState('');
+  const [savingTerm, setSavingTerm] = useState(false);
 
   const loadReport = useCallback(async (tabId: number) => {
     try {
@@ -72,6 +92,19 @@ export function App() {
     }
   }, []);
 
+  const loadGlossary = useCallback(async (videoId: string) => {
+    try {
+      const response = (await browser.runtime.sendMessage({
+        type: GET_VIDEO_GLOSSARY_MESSAGE,
+        videoId,
+      })) as GlossaryResponse;
+      if (!response.ok || !response.glossary) throw new Error(response.message);
+      setGlossary(response.glossary);
+    } catch {
+      setTermMessage('无法读取当前视频术语，请重新加载扩展后再试。');
+    }
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     void resolveSourceTabId().then((tabId) => {
@@ -88,6 +121,12 @@ export function App() {
       cancelled = true;
     };
   }, [loadReport]);
+
+  useEffect(() => {
+    if (!report?.videoId) return;
+    setTermMessage('');
+    void loadGlossary(report.videoId);
+  }, [loadGlossary, report?.videoId]);
 
   useEffect(() => {
     if (!sourceTabId || report?.fullTranslationStatus !== 'working') return;
@@ -146,6 +185,60 @@ export function App() {
     }
   };
 
+  const saveTerm = async () => {
+    if (!report || savingTerm) return;
+    const source = sourceTerm.trim().replace(/\s+/gu, ' ');
+    const translation = confirmedTerm.trim().replace(/\s+/gu, ' ');
+    if (!source || !translation) {
+      setTermMessage('请同时填写转录中的写法和确认写法。');
+      return;
+    }
+    setSavingTerm(true);
+    setTermMessage('正在保存术语并清理该视频的旧译文。');
+    try {
+      const response = (await browser.runtime.sendMessage({
+        type: UPSERT_VIDEO_GLOSSARY_TERM_MESSAGE,
+        videoId: report.videoId,
+        term: { source, translation },
+      })) as GlossaryResponse;
+      if (!response.ok || !response.glossary) throw new Error(response.message);
+      setGlossary(response.glossary);
+      setSourceTerm('');
+      setConfirmedTerm('');
+      setTermMessage(`已保存 ${source} → ${translation}，正在重新翻译当前位置。`);
+      if (sourceTabId !== undefined) await loadReport(sourceTabId);
+    } catch (error) {
+      setTermMessage(
+        error instanceof Error && error.message ? error.message : '术语未能保存，请重试。',
+      );
+    } finally {
+      setSavingTerm(false);
+    }
+  };
+
+  const deleteTerm = async (source: string) => {
+    if (!report || savingTerm) return;
+    setSavingTerm(true);
+    setTermMessage(`正在删除 ${source} 并重新整理该视频的译文。`);
+    try {
+      const response = (await browser.runtime.sendMessage({
+        type: DELETE_VIDEO_GLOSSARY_TERM_MESSAGE,
+        videoId: report.videoId,
+        source,
+      })) as GlossaryResponse;
+      if (!response.ok || !response.glossary) throw new Error(response.message);
+      setGlossary(response.glossary);
+      setTermMessage(`已删除 ${source}，正在重新翻译当前位置。`);
+      if (sourceTabId !== undefined) await loadReport(sourceTabId);
+    } catch (error) {
+      setTermMessage(
+        error instanceof Error && error.message ? error.message : '术语未能删除，请重试。',
+      );
+    } finally {
+      setSavingTerm(false);
+    }
+  };
+
   return (
     <main className="review-shell">
       <aside className="review-rail" aria-label="CueWeave 字幕工作台">
@@ -158,6 +251,7 @@ export function App() {
         <nav aria-label="工作台内容">
           <a href="#overview">处理进度</a>
           <a href="#corrections">修正记录</a>
+          <a href="#terminology">术语修正</a>
           <a href="#export">字幕导出</a>
         </nav>
       </aside>
@@ -267,10 +361,94 @@ export function App() {
               )}
             </section>
 
+            <section
+              className="terminology-section"
+              id="terminology"
+              aria-labelledby="terminology-heading"
+            >
+              <header className="section-heading">
+                <div>
+                  <p className="section-index">03 / TERMINOLOGY</p>
+                  <h2 id="terminology-heading">当前视频术语</h2>
+                  <p>当转录无法判断新名称时，确认一次即可用于本视频后续字幕。</p>
+                </div>
+                <TextAaIcon size={25} aria-hidden="true" />
+              </header>
+
+              <form
+                className="term-form"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void saveTerm();
+                }}
+              >
+                <label>
+                  <span>转录中的写法</span>
+                  <input
+                    value={sourceTerm}
+                    maxLength={96}
+                    placeholder="Soul"
+                    autoComplete="off"
+                    onChange={(event) => setSourceTerm(event.target.value)}
+                  />
+                </label>
+                <span className="term-arrow" aria-hidden="true">
+                  →
+                </span>
+                <label>
+                  <span>确认写法或译名</span>
+                  <input
+                    value={confirmedTerm}
+                    maxLength={96}
+                    placeholder="Sol"
+                    autoComplete="off"
+                    onChange={(event) => setConfirmedTerm(event.target.value)}
+                  />
+                </label>
+                <button className="primary-action" type="submit" disabled={savingTerm}>
+                  <PlusIcon size={18} weight="bold" aria-hidden="true" />
+                  保存并重新翻译
+                </button>
+              </form>
+
+              {glossary.manualTerms.length === 0 ? (
+                <div className="empty-state compact-empty">
+                  <TextAaIcon size={22} aria-hidden="true" />
+                  <div>
+                    <strong>还没有人工确认的术语</strong>
+                    <p>例如把转录中的 Soul 确认为 Sol；自动识别的术语不会覆盖这里的设置。</p>
+                  </div>
+                </div>
+              ) : (
+                <ul className="term-list" aria-label="人工确认术语">
+                  {glossary.manualTerms.map((term) => (
+                    <li key={term.source.toLocaleLowerCase()}>
+                      <span>{term.source}</span>
+                      <span aria-hidden="true">→</span>
+                      <strong>{term.translation}</strong>
+                      <button
+                        type="button"
+                        disabled={savingTerm}
+                        aria-label={`删除术语 ${term.source}`}
+                        onClick={() => void deleteTerm(term.source)}
+                      >
+                        <TrashSimpleIcon size={18} aria-hidden="true" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {termMessage && (
+                <p className="term-message" role="status">
+                  {termMessage}
+                </p>
+              )}
+            </section>
+
             <section className="export-section" id="export" aria-labelledby="export-heading">
               <header className="section-heading">
                 <div>
-                  <p className="section-index">03 / EXPORT</p>
+                  <p className="section-index">04 / EXPORT</p>
                   <h2 id="export-heading">导出字幕</h2>
                   <p>原始转录可立即导出；其余内容需要完整翻译通过校验。</p>
                 </div>

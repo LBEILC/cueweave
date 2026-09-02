@@ -80,6 +80,7 @@ export const SET_SUBTITLE_PREFERENCES_MESSAGE = 'cueweave:set-subtitle-preferenc
 export const UPDATE_SUBTITLE_PREFERENCES_MESSAGE = 'cueweave:update-subtitle-preferences';
 export const GET_TRANSCRIPT_REPORT_MESSAGE = 'cueweave:get-transcript-report';
 export const START_FULL_TRANSLATION_MESSAGE = 'cueweave:start-full-translation';
+export const REFRESH_VIDEO_TRANSLATIONS_MESSAGE = 'cueweave:refresh-video-translations';
 
 export interface ContentSettings {
   enabled: boolean;
