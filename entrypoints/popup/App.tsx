@@ -226,7 +226,7 @@ export function App() {
 
       <footer>
         <ShieldCheckIcon size={16} weight="regular" aria-hidden="true" />
-        <span>字幕清洗与断句在本机完成</span>
+        <span>字幕处理在本机完成 · 界面使用 MiSans</span>
       </footer>
     </main>
   );

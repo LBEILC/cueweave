@@ -61,20 +61,37 @@ function ensureOverlay(): HTMLDivElement | undefined {
   reflectState(host);
   const shadow = host.attachShadow({ mode: 'closed' });
   const style = document.createElement('style');
+  const regularFontUrl = browser.runtime.getURL('/fonts/MiSans-Regular.woff2');
+  const semiboldFontUrl = browser.runtime.getURL('/fonts/MiSans-Semibold.woff2');
   style.textContent = `
+    @font-face {
+      font-family: "MiSans";
+      src: url("${regularFontUrl}") format("woff2");
+      font-style: normal;
+      font-weight: 400;
+      font-display: swap;
+    }
+    @font-face {
+      font-family: "MiSans";
+      src: url("${semiboldFontUrl}") format("woff2");
+      font-style: normal;
+      font-weight: 600;
+      font-display: swap;
+    }
+    :host { font-size: medium; }
     .cueweave-caption {
       display: none;
-      max-width: min(920px, 92%);
+      max-width: min(52em, 88%);
       color: #f7efe3;
       background: color-mix(in srgb, #181613 84%, transparent);
       border: 1px solid color-mix(in srgb, #f2a33a 42%, transparent);
       border-radius: 3px;
       box-shadow: 0 8px 32px rgb(0 0 0 / 32%);
       padding: 0.48em 0.75em 0.52em;
-      font-family: "Noto Sans CJK SC", "Microsoft YaHei", "PingFang SC", sans-serif;
-      font-size: clamp(18px, 2.25vw, 34px);
+      font-family: "MiSans", "Mi Sans", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+      font-size: clamp(1.125em, 1.65vw, 1.75em);
       font-weight: 600;
-      line-height: 1.35;
+      line-height: 1.42;
       text-align: center;
       text-wrap: balance;
       text-shadow: 0 2px 3px rgb(0 0 0 / 72%);
