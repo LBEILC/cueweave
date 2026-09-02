@@ -3,8 +3,10 @@ import type { ProviderFailure, ProviderTestResult } from './types';
 
 export const TEST_PROVIDER_MESSAGE = 'cueweave:test-provider';
 export const TRANSLATE_WINDOW_MESSAGE = 'cueweave:translate-window';
+export const TRANSLATION_PROGRESS_MESSAGE = 'cueweave:translation-progress';
 
 export type TranslationPriority = 'current' | 'prefetch';
+export type TranslationProgressStage = 'translating' | 'repairing-boundaries' | 'repairing-output';
 
 export interface TranslationContext {
   videoId: string;
@@ -21,6 +23,12 @@ export interface TranslateWindowMessage {
   tokens: SourceToken[];
   context: TranslationContext;
   priority: TranslationPriority;
+}
+
+export interface TranslationProgressMessage {
+  type: typeof TRANSLATION_PROGRESS_MESSAGE;
+  windowId: string;
+  stage: TranslationProgressStage;
 }
 
 export type TranslateWindowResult =

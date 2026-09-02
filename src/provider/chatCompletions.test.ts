@@ -143,7 +143,10 @@ describe('Chat Completions provider', () => {
     vi.stubGlobal('fetch', fetchMock);
     vi.stubGlobal('browser', { permissions: { contains: vi.fn().mockResolvedValue(true) } });
 
-    const result = await translateTokenWindow(settings, longTokens);
+    const progress: string[] = [];
+    const result = await translateTokenWindow(settings, longTokens, (stage) => {
+      progress.push(stage);
+    });
 
     expect(result.map((cue) => cue.translation)).toEqual([
       '我们阅读大量样本后发现',
@@ -156,9 +159,13 @@ describe('Chat Completions provider', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
     const repairRequest = JSON.parse(
       String((fetchMock.mock.calls[1]?.[1] as RequestInit | undefined)?.body),
-    ) as { messages: Array<{ content: string }> };
-    expect(repairRequest.messages.at(-1)?.content).toContain('不要根据字符数机械切分');
+    ) as { messages: Array<{ role: string; content: string }> };
+    expect(repairRequest.messages).toHaveLength(2);
+    expect(repairRequest.messages.at(-1)?.content).toContain('不按字符数机械切分');
     expect(repairRequest.messages.at(-1)?.content).toContain('空格');
+    expect(repairRequest.messages.at(-1)?.content).toContain('targetTokens');
+    expect(repairRequest.messages.map((message) => message.role)).toEqual(['system', 'user']);
+    expect(progress).toEqual(['translating', 'repairing-boundaries']);
   });
 
   it('reports missing runtime permission before sending a request', async () => {

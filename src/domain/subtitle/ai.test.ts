@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { buildAiSubtitlePrompt, findAiSubtitleReviewIssue, parseAiSubtitleOutput } from './ai';
+import {
+  AiSubtitleBoundaryError,
+  applyAiSubtitleBoundaryRepair,
+  buildAiSubtitleBoundaryRepairPrompt,
+  buildAiSubtitlePrompt,
+  findAiSubtitleReviewIssue,
+  parseAiSubtitleOutput,
+} from './ai';
 import type { SourceToken } from './types';
 
 function tokensFor(text: string): SourceToken[] {
@@ -161,6 +168,57 @@ describe('AI subtitle output', () => {
         tokens,
       ),
     ).toThrow('使用空格代替了语义分段');
+  });
+
+  it('repairs only the rejected unit and preserves surrounding model output', () => {
+    const tokens = tokensFor(
+      'First thought. And I think a clear eyed sober response is better. Final thought.',
+    );
+    const originalContent = JSON.stringify({
+      units: [
+        { startIndex: 0, endIndex: 1, translation: '第一个观点', sentenceEnd: true },
+        {
+          startIndex: 2,
+          endIndex: 11,
+          translation: '我认为保持清醒，作出稳健回应会更好',
+          sentenceEnd: true,
+        },
+        { startIndex: 12, endIndex: 13, translation: '最后一个观点', sentenceEnd: true },
+      ],
+    });
+
+    let boundaryError: AiSubtitleBoundaryError | undefined;
+    try {
+      parseAiSubtitleOutput(originalContent, tokens);
+    } catch (error) {
+      if (error instanceof AiSubtitleBoundaryError) boundaryError = error;
+    }
+    expect(boundaryError?.issues).toHaveLength(1);
+
+    const prompt = buildAiSubtitleBoundaryRepairPrompt(tokens, boundaryError!);
+    expect(prompt).toContain('只修复下面列出的中文字幕 unit');
+    expect(prompt).toContain('targetTokens');
+    expect(prompt).toContain('contextBefore');
+
+    const result = applyAiSubtitleBoundaryRepair(
+      originalContent,
+      JSON.stringify({
+        units: [
+          { startIndex: 2, endIndex: 7, translation: '我认为应该保持清醒', sentenceEnd: false },
+          { startIndex: 8, endIndex: 11, translation: '作出稳健回应会更好', sentenceEnd: true },
+        ],
+      }),
+      tokens,
+      boundaryError!,
+    );
+
+    expect(result.map((cue) => cue.translation)).toEqual([
+      '第一个观点',
+      '我认为应该保持清醒',
+      '作出稳健回应会更好',
+      '最后一个观点',
+    ]);
+    expect(result.flatMap((cue) => cue.sourceTokenIds)).toEqual(tokens.map((token) => token.id));
   });
 
   it('keeps a longer translation intact when it has no natural boundary', () => {

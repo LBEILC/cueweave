@@ -1,8 +1,10 @@
 import {
   isTestProviderMessage,
   isTranslateWindowMessage,
+  TRANSLATION_PROGRESS_MESSAGE,
   type TranslateWindowMessage,
   type TranslateWindowResult,
+  type TranslationProgressStage,
 } from '../src/provider/messages';
 import { readProviderSettings } from '../src/provider/settings';
 import { testProviderConnection, translateTokenWindow } from '../src/provider/chatCompletions';
@@ -77,6 +79,7 @@ function validTranslationContext(message: TranslateWindowMessage): boolean {
 
 async function translateWindowMessage(
   message: TranslateWindowMessage,
+  onProgress?: (stage: TranslationProgressStage) => void,
 ): Promise<TranslateWindowResult> {
   if (!validTranslationTokens(message.tokens) || !validTranslationContext(message)) {
     return {
@@ -115,7 +118,7 @@ async function translateWindowMessage(
         // A second cache read closes the race between identical queued requests.
       }
 
-      const cues = await translateTokenWindow(settings, message.tokens);
+      const cues = await translateTokenWindow(settings, message.tokens, onProgress);
       try {
         await translationCache.put(cacheKey, cues);
       } catch {
@@ -147,7 +150,7 @@ export default defineBackground(() => {
     }
   });
 
-  browser.runtime.onMessage.addListener((message: unknown) => {
+  browser.runtime.onMessage.addListener((message: unknown, sender) => {
     if (
       typeof message === 'object' &&
       message !== null &&
@@ -189,7 +192,16 @@ export default defineBackground(() => {
     }
 
     if (isTranslateWindowMessage(message)) {
-      return translateWindowMessage(message);
+      return translateWindowMessage(message, (stage) => {
+        if (sender.tab?.id === undefined) return;
+        void browser.tabs
+          .sendMessage(sender.tab.id, {
+            type: TRANSLATION_PROGRESS_MESSAGE,
+            windowId: message.context.windowId,
+            stage,
+          })
+          .catch(() => undefined);
+      });
     }
 
     return undefined;

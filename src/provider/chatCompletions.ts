@@ -1,10 +1,14 @@
 import type { DisplayCue, SourceToken } from '../domain/subtitle';
 import {
   AI_SUBTITLE_SCHEMA,
+  AiSubtitleBoundaryError,
+  applyAiSubtitleBoundaryRepair,
+  buildAiSubtitleBoundaryRepairPrompt,
   buildAiSubtitlePrompt,
   findAiSubtitleReviewIssue,
   parseAiSubtitleOutput,
 } from '../domain/subtitle/ai';
+import type { TranslationProgressStage } from './messages';
 import { providerOriginPattern } from './settings';
 import {
   ProviderError,
@@ -249,6 +253,7 @@ async function postProviderResponse(
 export async function translateTokenWindow(
   settings: ProviderSettings,
   tokens: readonly SourceToken[],
+  onProgress?: (stage: TranslationProgressStage) => void,
 ): Promise<DisplayCue[]> {
   const messages = [
     {
@@ -270,22 +275,37 @@ export async function translateTokenWindow(
   let lastError: unknown;
   let invalidContent = '';
   for (let attempt = 0; attempt < 2; attempt += 1) {
+    const boundaryError =
+      attempt === 1 && lastError instanceof AiSubtitleBoundaryError ? lastError : undefined;
+    onProgress?.(
+      attempt === 0 ? 'translating' : boundaryError ? 'repairing-boundaries' : 'repairing-output',
+    );
     const content = await postProviderResponse(
       settings,
       attempt === 0
         ? messages
-        : [
-            ...messages,
-            { role: 'assistant' as const, content: invalidContent },
-            {
-              role: 'user' as const,
-              content: `上一次结果需要修正：${lastError instanceof Error ? lastError.message : '未知结构错误'} 请重新返回全部词元，确保每个 unit 的 startIndex 紧接前一个 endIndex，索引连续、无遗漏、无重复。不要根据字符数机械切分，也不要只删除原译文中的空格后保留同一个 unit。如果空格、标点或明显停顿代表不同意群，请在语义准确的英文词元边界拆成多个 unit。从句、转折、让步、递进、补充说明和自然呼吸点都可以单独显示，不要求每个 unit 自己构成完整句。如果仔细复审后确实没有自然边界，可以保留较长 unit，但不得用空格或换行模拟分句。禁止拆开英文词、专有名词或数字，禁止为两条 translation 重复同一 source 范围。`,
-            },
-          ],
+        : boundaryError
+          ? [
+              messages[0]!,
+              {
+                role: 'user' as const,
+                content: buildAiSubtitleBoundaryRepairPrompt(tokens, boundaryError),
+              },
+            ]
+          : [
+              ...messages,
+              { role: 'assistant' as const, content: invalidContent },
+              {
+                role: 'user' as const,
+                content: `上一次结果需要修正：${lastError instanceof Error ? lastError.message : '未知结构错误'} 请重新返回全部词元，确保每个 unit 的 startIndex 紧接前一个 endIndex，索引连续、无遗漏、无重复。不要根据字符数机械切分，也不要只删除原译文中的空格后保留同一个 unit。如果空格、标点或明显停顿代表不同意群，请在语义准确的英文词元边界拆成多个 unit。从句、转折、让步、递进、补充说明和自然呼吸点都可以单独显示，不要求每个 unit 自己构成完整句。如果仔细复审后确实没有自然边界，可以保留较长 unit，但不得用空格或换行模拟分句。禁止拆开英文词、专有名词或数字，禁止为两条 translation 重复同一 source 范围。`,
+              },
+            ],
       responseFormat,
     );
     try {
-      const cues = parseAiSubtitleOutput(content, tokens);
+      const cues = boundaryError
+        ? applyAiSubtitleBoundaryRepair(invalidContent, content, tokens, boundaryError)
+        : parseAiSubtitleOutput(content, tokens);
       const reviewIssue = attempt === 0 ? findAiSubtitleReviewIssue(cues) : undefined;
       if (reviewIssue) throw new Error(reviewIssue);
       return cues;

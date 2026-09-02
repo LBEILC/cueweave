@@ -7,7 +7,12 @@ import {
   type SourceToken,
   type TokenWindow,
 } from '../../src/domain/subtitle';
-import { TRANSLATE_WINDOW_MESSAGE, type TranslateWindowResult } from '../../src/provider/messages';
+import {
+  TRANSLATE_WINDOW_MESSAGE,
+  TRANSLATION_PROGRESS_MESSAGE,
+  type TranslateWindowResult,
+  type TranslationProgressStage,
+} from '../../src/provider/messages';
 import {
   CAPTION_TRACK_REQUEST_EVENT,
   CAPTION_TRACK_RESPONSE_EVENT,
@@ -38,6 +43,7 @@ interface WindowTranslationState {
   status: WindowTranslationStatus;
   priority: 'current' | 'prefetch';
   failureCode?: string;
+  stage?: TranslationProgressStage;
 }
 
 let state: ContentState = {
@@ -275,6 +281,15 @@ function formatTime(timeMs: number): string {
   return `${minutes}:${seconds}`;
 }
 
+function logTranslationEvent(
+  event: 'start' | 'promote' | 'progress' | 'success' | 'failure',
+  details: Record<string, boolean | number | string | undefined>,
+): void {
+  const payload = { event, ...details };
+  if (event === 'failure') console.warn('[CueWeave] 字幕翻译', payload);
+  else console.info('[CueWeave] 字幕翻译', payload);
+}
+
 function continuePrefetch(
   window: TokenWindow,
   remainingPrefetch: number,
@@ -331,6 +346,13 @@ async function translateWindow(
   const requestSession = subtitleSession;
 
   if (!promotingPrefetch) windowStates.set(window.id, { status: 'working', priority });
+  logTranslationEvent(promotingPrefetch ? 'promote' : 'start', {
+    priority,
+    startMs: window.startMs,
+    endMs: window.endMs,
+    tokenCount: window.tokens.length,
+  });
+  const requestStartedAt = performance.now();
   updateState({
     aiStatus: 'working',
     aiMessage:
@@ -357,6 +379,13 @@ async function translateWindow(
       const needsConfiguration =
         result.error.code === 'not-configured' || result.error.code === 'permission-missing';
       windowRetryAfterMs.set(window.id, Date.now() + (needsConfiguration ? 15_000 : 30_000));
+      logTranslationEvent('failure', {
+        priority,
+        startMs: window.startMs,
+        endMs: window.endMs,
+        durationMs: Math.round(performance.now() - requestStartedAt),
+        code: result.error.code,
+      });
       if (focusVersion !== translationFocusVersion) return;
       if (needsConfiguration) {
         updateState({ aiStatus: 'unconfigured', aiMessage: result.error.message });
@@ -369,6 +398,14 @@ async function translateWindow(
     windowRetryAfterMs.delete(window.id);
     windowStates.set(window.id, { status: 'ready', priority });
     mergeTranslatedCues(result.cues);
+    logTranslationEvent('success', {
+      priority,
+      startMs: window.startMs,
+      endMs: window.endMs,
+      durationMs: Math.round(performance.now() - requestStartedAt),
+      cacheHit: result.cacheHit,
+      cueCount: result.cues.length,
+    });
     if (focusVersion === translationFocusVersion) {
       updateState({
         aiStatus: 'ready',
@@ -382,6 +419,13 @@ async function translateWindow(
     if (requestSession !== subtitleSession) return;
     windowStates.set(window.id, { status: 'failed', priority, failureCode: 'network' });
     windowRetryAfterMs.set(window.id, Date.now() + 30_000);
+    logTranslationEvent('failure', {
+      priority,
+      startMs: window.startMs,
+      endMs: window.endMs,
+      durationMs: Math.round(performance.now() - requestStartedAt),
+      code: 'background-unreachable',
+    });
     if (focusVersion !== translationFocusVersion) return;
     updateState({
       aiStatus: 'error',
@@ -433,7 +477,12 @@ function renderLoop(): void {
   let actionDisabled = false;
   if (fallbackCue && !translatedCue && activeWindow) {
     if (activeWindowState?.status === 'working') {
-      actionLabel = '正在翻译此处';
+      actionLabel =
+        activeWindowState.stage === 'repairing-boundaries'
+          ? '正在修复断句'
+          : activeWindowState.stage === 'repairing-output'
+            ? '正在修复字幕'
+            : '正在翻译此处';
       actionDisabled = true;
     } else if (
       activeWindowState?.status === 'failed' &&
@@ -621,6 +670,41 @@ export default defineContentScript({
     }
 
     browser.runtime.onMessage.addListener((message: unknown) => {
+      if (
+        typeof message === 'object' &&
+        message !== null &&
+        'type' in message &&
+        message.type === TRANSLATION_PROGRESS_MESSAGE &&
+        'windowId' in message &&
+        typeof message.windowId === 'string' &&
+        'stage' in message &&
+        (message.stage === 'translating' ||
+          message.stage === 'repairing-boundaries' ||
+          message.stage === 'repairing-output')
+      ) {
+        const windowState = windowStates.get(message.windowId);
+        const tokenWindow = tokenWindows.find((candidate) => candidate.id === message.windowId);
+        if (windowState?.status === 'working') {
+          windowStates.set(message.windowId, { ...windowState, stage: message.stage });
+        }
+        logTranslationEvent('progress', {
+          stage: message.stage,
+          startMs: tokenWindow?.startMs,
+          endMs: tokenWindow?.endMs,
+        });
+        if (message.windowId === focusedWindowId) {
+          updateState({
+            aiStatus: 'working',
+            aiMessage:
+              message.stage === 'repairing-boundaries'
+                ? '正在修复当前位置的断句。'
+                : message.stage === 'repairing-output'
+                  ? '正在修复当前位置的字幕结果。'
+                  : '正在翻译当前位置。',
+          });
+        }
+        return Promise.resolve({ ok: true });
+      }
       if (
         typeof message === 'object' &&
         message !== null &&
