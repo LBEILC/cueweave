@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import fixture from '../../test/fixtures/youtube/VeizK1M7V7E.en.354560-385000.json';
 import astraFixture from '../../test/fixtures/youtube/VeizK1M7V7E.en.785000-805000.json';
+import longSemanticFixture from '../../test/fixtures/youtube/VeizK1M7V7E.long-semantic-units.json';
 import { buildSourceTokens, createTokenWindows } from '../domain/subtitle';
+import type { SourceToken } from '../domain/subtitle';
 import { parseJson3Captions } from '../platform/youtube/captions';
 import { translateTokenWindow } from './chatCompletions';
 
@@ -14,6 +16,18 @@ const astraTokens = buildSourceTokens(parseJson3Captions(astraFixture));
 const astraWindow = createTokenWindows(astraTokens).find((candidate) =>
   candidate.tokens.some((token) => token.text.replace(/[^\p{L}\p{N}]/gu, '') === 'Astro'),
 );
+
+function longSemanticTokens(sample: (typeof longSemanticFixture)[number]): SourceToken[] {
+  const words = sample.sourceText.split(/\s+/u);
+  const duration = sample.endMs - sample.startMs;
+  return words.map((text, index) => ({
+    id: `${sample.timeLabel}:${index}`,
+    cueId: sample.timeLabel,
+    startMs: sample.startMs + Math.round((duration * index) / words.length),
+    endMs: sample.startMs + Math.round((duration * (index + 1)) / words.length),
+    text,
+  }));
+}
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -43,6 +57,38 @@ describe('real subtitle model integration', () => {
     },
     120_000,
   );
+
+  for (const sample of longSemanticFixture) {
+    it.runIf(Boolean(apiKey))(
+      `splits the real long semantic unit at ${sample.timeLabel}`,
+      async () => {
+        vi.stubGlobal('browser', { permissions: { contains: vi.fn().mockResolvedValue(true) } });
+        const sampleTokens = longSemanticTokens(sample);
+
+        const cues = await translateTokenWindow(
+          {
+            baseUrl: 'https://api.gpt.ge/v1',
+            apiKey,
+            model: 'gemini-3.1-flash-lite',
+            protocol: 'chat-completions',
+          },
+          sampleTokens,
+          undefined,
+          undefined,
+          { videoTitle: 'Sam Altman on OpenAI’s next model and the AI backlash' },
+        );
+
+        expect(cues.length).toBeGreaterThanOrEqual(2);
+        expect(cues.flatMap((cue) => cue.sourceTokenIds)).toEqual(
+          sampleTokens.map((token) => token.id),
+        );
+        expect(
+          Math.max(...cues.map((cue) => Array.from(cue.translation.replace(/\s+/gu, '')).length)),
+        ).toBeLessThanOrEqual(30);
+      },
+      120_000,
+    );
+  }
 
   it.runIf(Boolean(apiKey))(
     'repairs a context-supported product-name transcription error',

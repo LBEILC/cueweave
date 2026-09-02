@@ -1,0 +1,18 @@
+[
+  {
+    "timeLabel": "21:56",
+    "startMs": 1313000,
+    "endMs": 1321000,
+    "sourceText": "if we didn't have this track record of really trying to put powerful models in people's hands and doing the safety work we need to do that",
+    "translation": "如果我们没有这种记录 确实一直在努力将强大的模型交到人们手中 并且完成了我们需要做的安全工作",
+    "preferredBoundary": "and doing"
+  },
+  {
+    "timeLabel": "25:30",
+    "startMs": 1528000,
+    "endMs": 1538000,
+    "sourceText": "If you look at the way people have like totally transformed their ability to be effective at work or do new kinds of things or just use this in their personal life in all kinds of wonderful ways",
+    "translation": "如果你看看人们如何彻底改变了工作效率 或者从事新类型的工作 或者只是在个人生活中以各种美妙的方式使用它",
+    "preferredBoundary": "or just use"
+  }
+]
