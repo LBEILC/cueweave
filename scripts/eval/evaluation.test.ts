@@ -208,6 +208,9 @@ describe('source alignment and quality signals', () => {
     expect(summarize(baseline).missingTokens).toBe(0);
     expect(summarize(baseline).caseChecks[0]?.status).toBe('待人工评审');
     expect(summarize(baseline).reportedUsage).toBeNull();
+    baseline.cases[0]!.forbidden = ['不能出现的词'];
+    expect(summarize(baseline).caseChecks[0]?.forbidden).toEqual(['不能出现的词']);
+    expect(summarize(baseline).caseChecks[0]?.matchedForbidden).toEqual([]);
   });
 });
 

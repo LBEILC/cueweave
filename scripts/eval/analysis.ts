@@ -45,8 +45,8 @@ export function summarize(run: EvalRun) {
         : missing.length || forbidden.length
           ? '词面检查有差异'
           : '待人工评审',
-      missing,
-      forbidden,
+      missingRequired: missing,
+      matchedForbidden: forbidden,
     };
   });
   return {
