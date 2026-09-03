@@ -35,6 +35,41 @@ afterEach(() => {
 
 describe('real subtitle model integration', () => {
   it.runIf(Boolean(apiKey))(
+    'preserves decimal periods in versions and percentages',
+    async () => {
+      vi.stubGlobal('browser', { permissions: { contains: vi.fn().mockResolvedValue(true) } });
+      const versionTokens = 'Version 5.6 is ready. GPT-5.6 improved by 1.25 percent.'
+        .split(' ')
+        .map((text, index) => ({
+          id: `decimal-${index}`,
+          cueId: 'decimal-cue',
+          startMs: index * 250,
+          endMs: (index + 1) * 250,
+          text,
+        }));
+      const cues = await translateTokenWindow(
+        {
+          baseUrl: 'https://api.gpt.ge/v1',
+          apiKey,
+          model: 'gemini-3.1-flash-lite',
+          protocol: 'chat-completions',
+        },
+        versionTokens,
+      );
+      const translation = cues.map((cue) => cue.translation).join(' ');
+
+      expect(translation).toContain('5.6');
+      expect(translation).toContain('GPT-5.6');
+      expect(translation).toContain('1.25');
+      expect(translation).not.toContain('GPT-56');
+      expect(cues.flatMap((cue) => cue.sourceTokenIds)).toEqual(
+        versionTokens.map((token) => token.id),
+      );
+    },
+    120_000,
+  );
+
+  it.runIf(Boolean(apiKey))(
     'clusters the real ChatGPT ASR variants before translating windows',
     async () => {
       vi.stubGlobal('browser', { permissions: { contains: vi.fn().mockResolvedValue(true) } });

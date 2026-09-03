@@ -72,7 +72,10 @@ const SOFT_REVIEW_TRANSLATION_CHARACTERS = 30;
 const MIN_LONG_SEMANTIC_SOURCE_TOKENS = 16;
 const MIN_LONG_SEMANTIC_BOUNDARY_SIDE_TOKENS = 5;
 const MIN_PUNCTUATION_CHUNK_CHARACTERS = 4;
-const HIDDEN_TRANSLATION_BOUNDARY = /[，。；：,.;:]+/u;
+// Dots inside numbers and Latin identifiers carry content, not sentence boundaries.
+const HIDDEN_TRANSLATION_BOUNDARY = /(?:[，。；：,;:]|(?<![A-Za-z0-9])\.|\.(?![A-Za-z0-9]))+/u;
+const TRANSLATION_CONTENT_PERIOD_RULE =
+  '版本号、小数和标识符内部的英文点号必须保留，例如 5.6、v1.2.3、GPT-5.6、Node.js；这些点号是内容，不得删除或作为分句边界。';
 const TRAILING_DISCOURSE_MARKER = /(?:^|\s)(?:hey|well|so|i mean|you know)[,.!?]?$/iu;
 const MIN_APPLIED_CORRECTION_CONFIDENCE = 0.85;
 const CORRECTION_CATEGORIES = ['proper-noun', 'asr-error', 'formatting', 'other'] as const;
@@ -88,8 +91,8 @@ const LONG_SEMANTIC_CONNECTORS = new Set([
   'while',
 ]);
 
-export const AI_PROMPT_VERSION = 'prompt-v12';
-export const DISPLAY_SEGMENTATION_VERSION = 'display-v8';
+export const AI_PROMPT_VERSION = 'prompt-v13';
+export const DISPLAY_SEGMENTATION_VERSION = 'display-v9';
 
 export const AI_SUBTITLE_SCHEMA = {
   type: 'object',
@@ -674,7 +677,7 @@ export function buildAiSubtitlePrompt(
     '2. 每个 unit 必须覆盖一段连续词元；所有索引从 0 开始，必须按顺序完整覆盖且仅覆盖一次。',
     '3. units 不返回英文原文；CueWeave 会根据索引在本地重建。若 ASR 明显把产品名、人名、公司名或单词识别错误，只在顶层 corrections 中返回最小连续词元范围、正确文本、置信度和类型。',
     '4. translation 使用自然简体中文，优先 10–20 个字符；无法在自然语义边界拆分时可以更长，不能仅为了满足字符数硬切。一个语法完整的英文长句也可以拆成多个显示 unit；并列项、条件层次、从句和补充说明能够独立阅读时应拆开，中间 unit 的 sentenceEnd 保持 false。',
-    '5. 中文逗号、句号、分号、冒号及其英文对应符号只代表分句边界，不得出现在 translation 中；遇到这些边界应返回多个 unit。顿号、问号和感叹号可以保留。',
+    `5. 用于分句的中文逗号、句号、分号、冒号及其英文对应符号不得出现在 translation 中；遇到这些边界应返回多个 unit。顿号、问号和感叹号可以保留。${TRANSLATION_CONTENT_PERIOD_RULE}`,
     '6. translation 可以用单个空格表现明显的口语停顿，但空格不是 unit 边界；需要改变字幕时间范围时，必须在对应英文词元边界返回多个 unit。不得使用换行或重复空格。',
     '7. 从句、转折、让步、递进、补充说明和自然呼吸点都可以成为 unit 边界，不要求每个 unit 自己构成完整句；不得拆开 AI 等英文词、专有名词或数字。',
     '8. 每个 translation 必须只翻译自己覆盖的英文词元，不得把相邻 unit 的语义提前或延后。',
@@ -729,6 +732,7 @@ export function buildAiSubtitleBoundaryRepairPrompt(
     '返回的 unit 只能覆盖各自 targetTokens 的全局索引范围；每个范围必须连续、完整覆盖且仅覆盖一次。',
     'contextBefore 和 contextAfter 只用于理解上下文，不得覆盖或翻译。',
     'translation 不得使用中文逗号、句号、分号、冒号或换行模拟分句。可以用单个空格表现口语停顿，但不得把空格当作词元范围边界。',
+    TRANSLATION_CONTENT_PERIOD_RULE,
     '输出前逐条检查 translation：如果仍想使用分句标点，必须继续在对应英文词元边界拆分。',
     '根据语义判断每个 replacement 的 sentenceEnd；中间 replacement 只有在完整句确实结束时才为 true，最后一个必须继承原 unit 的值。',
     '完整的英文语法句不等于单条显示字幕。长句中的并列项、条件层次、从句或补充说明可以拆成多个短 unit，且中间 unit 的 sentenceEnd 为 false。',

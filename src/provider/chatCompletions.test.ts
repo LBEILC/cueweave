@@ -34,6 +34,34 @@ afterEach(() => {
 });
 
 describe('Chat Completions provider', () => {
+  it('keeps a model-returned version dot without starting a repair request', async () => {
+    const versionTokens = 'Version 5.6 is ready.'.split(' ').map((text, index) => ({
+      id: `version-${index}`,
+      cueId: 'version-cue',
+      startMs: index * 250,
+      endMs: (index + 1) * 250,
+      text,
+    }));
+    const fetchMock = vi.fn().mockResolvedValue(
+      completion({
+        units: [
+          { startIndex: 0, endIndex: 3, translation: '5.6版本已准备好。', sentenceEnd: true },
+        ],
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('browser', { permissions: { contains: vi.fn().mockResolvedValue(true) } });
+    const progress: string[] = [];
+
+    const cues = await translateTokenWindow(settings, versionTokens, (stage) =>
+      progress.push(stage),
+    );
+
+    expect(cues[0]?.translation).toBe('5.6版本已准备好');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(progress).toEqual(['translating']);
+  });
+
   it('resolves video-wide entity variants with a dedicated structured request', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       completion({
