@@ -6,7 +6,7 @@ import type { DisplayCue, SourceToken } from '../../src/domain/subtitle';
 import { translateTokenWindow } from '../../src/provider/chatCompletions';
 import { alignRuns, cueWarnings, summarize } from './analysis';
 import { hash, readRun, writeJson } from './io';
-import { renderReport, writeComparison, writeReport } from './report';
+import { renderReport, REPORT_PAGE_SIZE, scriptJson, writeComparison, writeReport } from './report';
 import { canReuse, contextForWindow, runEvaluation } from './runner';
 import type { RunOptions } from './runner';
 import { createRuntime, responseUsage } from './trace';
@@ -310,6 +310,38 @@ describe('resume and context isolation', () => {
 });
 
 describe('safe reports', () => {
+  it('bounds initial markup while keeping every source range available for search and paging', async () => {
+    const baseline = run();
+    baseline.tokens = Array.from({ length: 150 }, (_, index) => ({
+      ...tokens[0]!,
+      id: `long-${index}`,
+      text: `word-${index}`,
+      startMs: index * 1000,
+      endMs: (index + 1) * 1000,
+    }));
+    baseline.windows[0]!.tokens = baseline.tokens;
+    baseline.results.window![0]!.cues = baseline.tokens.map((token, index) => ({
+      ...cue(0, 0),
+      id: `cue-${index}`,
+      sourceTokenIds: [token.id],
+      sourceText: token.text,
+      startMs: token.startMs,
+      endMs: token.endMs,
+    }));
+    const html = await renderReport(baseline);
+    const payload = JSON.parse(
+      html.match(/<script type="application\/json" id="report-data">([\s\S]*?)<\/script>/u)![1]!,
+    );
+    expect(payload.rows).toHaveLength(150);
+    expect(payload.rows[149].search).toContain('word-149');
+    expect(html.match(/<article /gu) ?? []).toHaveLength(REPORT_PAGE_SIZE);
+    expect(html).not.toContain('<details class="log">');
+    const firstPage = html.split('<div id="results">')[1]!.split('<noscript>')[0]!;
+    expect(firstPage).not.toContain('textarea');
+    expect(firstPage).not.toContain('select');
+    expect(html).toContain('id="review-template"');
+    expect(scriptJson({ html: '</script><script>alert(1)</script>\u2028' })).not.toContain('<');
+  });
   it('escapes untrusted model output and distinguishes incomplete exports', async () => {
     const baseline = run([cue(0, 3, '</script><img src=x onerror=alert(1)>')]);
     const html = await renderReport(baseline);

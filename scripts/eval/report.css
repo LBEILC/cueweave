@@ -64,6 +64,34 @@ button:hover {
   border-color: var(--accent);
   color: var(--accent);
 }
+button:disabled {
+  cursor: default;
+  color: var(--muted);
+  opacity: 0.5;
+}
+.pager {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 16px 0;
+}
+.pager [data-page-label] {
+  color: var(--muted);
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+}
+.group {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 320px;
+}
+.group:focus {
+  outline: none;
+}
+.group:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+}
 :focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 4px;
