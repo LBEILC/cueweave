@@ -1,0 +1,45 @@
+[
+  {
+    "id": "hey-boundary",
+    "label": "Hey 与后续内容的边界",
+    "startMs": 358000,
+    "endMs": 387000,
+    "review": "检查 hey 是否与后续引语合理连接，是否出现悬空的称呼或缺失内容。"
+  },
+  {
+    "id": "astra-sol",
+    "label": "Astra / Soul / Sol",
+    "startMs": 784000,
+    "endMs": 809000,
+    "forbidden": ["GPT-4o"],
+    "review": "核对 Astra 是否被臆改；用户确认此处 Soul 指 Sol，但没有足够证据的自动流程应保留原文或标记不确定，不应擅自改成 Astra。本提示不提供给模型。"
+  },
+  {
+    "id": "long-2156",
+    "label": "长条件句与并列动作",
+    "startMs": 1308000,
+    "endMs": 1332000,
+    "review": "核对条件与主句关系是否保留，put powerful models 与 doing the safety work 能否自然分屏，避免整句挤成双行或拆断搭配。"
+  },
+  {
+    "id": "long-2530",
+    "label": "工作 / 新工作 / 个人生活",
+    "startMs": 1520000,
+    "endMs": 1550000,
+    "review": "检查三个并列场景是否自然切分，中英文是否同步，不能仅因字数达标就判定优秀。"
+  },
+  {
+    "id": "jpt-chatgpt",
+    "label": "JPT 转录纠错",
+    "startMs": 1964000,
+    "endMs": 1987000,
+    "review": "核对 JPT 是否在视频实体证据支持下归并到 ChatGPT；检查没有错改其他专有名词。"
+  },
+  {
+    "id": "chbt-chatgpt",
+    "label": "CHBT 转录纠错",
+    "startMs": 2010000,
+    "endMs": 2034000,
+    "review": "核对 CHBT 是否根据全片上下文归并到 ChatGPT，且译文没有漏掉水资源相关内容。"
+  }
+]

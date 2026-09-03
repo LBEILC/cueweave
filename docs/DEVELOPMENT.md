@@ -50,6 +50,10 @@ npx vitest run src/provider/real-world.integration.test.ts
 
 该测试只从环境变量读取密钥，并断言真实词元的跨边界归属；未设置环境变量时自动跳过。
 
+## 字幕翻译评测
+
+完整字幕可以脱离浏览器运行同一翻译管线，保存请求与修复记录，并生成按原文范围对齐的模型对比页。运行、续跑和评审方法见[字幕离线评测](EVALUATION.md)。默认单元测试覆盖评测工具，不会调用模型；`eval:translate` 是显式联网的独立命令。
+
 ## 加载未打包扩展
 
 1. 运行 `npm run build`。

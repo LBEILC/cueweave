@@ -26,6 +26,7 @@ import {
   parseAiSubtitleOutput,
 } from '../domain/subtitle/ai';
 import type { TranslationProgressStage } from './messages';
+import type { ProviderRuntime } from './runtime';
 import { providerOriginPattern } from './settings';
 import {
   ProviderError,
@@ -100,6 +101,7 @@ async function postChatCompletion(
   messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>,
   responseFormat?: object,
   externalSignal?: AbortSignal,
+  runtime: ProviderRuntime = {},
 ): Promise<string> {
   if (!settings.apiKey) {
     throw new ProviderError(
@@ -108,7 +110,7 @@ async function postChatCompletion(
     );
   }
 
-  await assertProviderPermission(settings);
+  await (runtime.assertPermission ?? assertProviderPermission)(settings);
   const controller = new AbortController();
   const abortFromCaller = () => controller.abort();
   externalSignal?.addEventListener('abort', abortFromCaller, { once: true });
@@ -116,7 +118,7 @@ async function postChatCompletion(
   const timeoutId = globalThis.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
   try {
-    const response = await fetch(`${settings.baseUrl}/chat/completions`, {
+    const response = await (runtime.fetch ?? fetch)(`${settings.baseUrl}/chat/completions`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${settings.apiKey}`,
@@ -185,6 +187,7 @@ async function postResponse(
   messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>,
   responseFormat?: object,
   externalSignal?: AbortSignal,
+  runtime: ProviderRuntime = {},
 ): Promise<string> {
   if (!settings.apiKey) {
     throw new ProviderError(
@@ -193,7 +196,7 @@ async function postResponse(
     );
   }
 
-  await assertProviderPermission(settings);
+  await (runtime.assertPermission ?? assertProviderPermission)(settings);
   const controller = new AbortController();
   const abortFromCaller = () => controller.abort();
   externalSignal?.addEventListener('abort', abortFromCaller, { once: true });
@@ -201,7 +204,7 @@ async function postResponse(
   const timeoutId = globalThis.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
   try {
-    const response = await fetch(`${settings.baseUrl}/responses`, {
+    const response = await (runtime.fetch ?? fetch)(`${settings.baseUrl}/responses`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${settings.apiKey}`,
@@ -269,11 +272,12 @@ async function postProviderResponse(
   messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>,
   responseFormat?: object,
   signal?: AbortSignal,
+  runtime: ProviderRuntime = {},
 ): Promise<string> {
   const postByProtocol = (protocol: Exclude<ProviderProtocol, 'auto'>) =>
     protocol === 'responses'
-      ? postResponse(settings, messages, responseFormat, signal)
-      : postChatCompletion(settings, messages, responseFormat, signal);
+      ? postResponse(settings, messages, responseFormat, signal, runtime)
+      : postChatCompletion(settings, messages, responseFormat, signal, runtime);
 
   if (settings.protocol !== 'auto') return postByProtocol(settings.protocol);
 
@@ -296,6 +300,7 @@ export async function translateTokenWindow(
   onProgress?: (stage: TranslationProgressStage) => void,
   signal?: AbortSignal,
   context: AiSubtitleContext = {},
+  runtime: ProviderRuntime = {},
 ): Promise<DisplayCue[]> {
   const correctionEnabled = context.correctionEnabled !== false;
   const messages = [
@@ -340,6 +345,7 @@ export async function translateTokenWindow(
         ],
         responseFormat,
         signal,
+        runtime,
       );
 
       try {
@@ -351,20 +357,26 @@ export async function translateTokenWindow(
         mergedContent = candidateContent;
         return parseAiSubtitleOutput(candidateContent, tokens, correctionEnabled, context);
       } catch (error) {
+        runtime.onDiagnostic?.({
+          kind: 'validation-error',
+          message: error instanceof Error ? error.message : String(error),
+        });
         lastError = error;
         if (error instanceof AiSubtitleBoundaryError) boundaryError = error;
       }
     }
 
     try {
-      return parseAiSubtitleFallbackOutput(mergedContent, tokens, correctionEnabled, context);
+      const cues = parseAiSubtitleFallbackOutput(mergedContent, tokens, correctionEnabled, context);
+      runtime.onDiagnostic?.({ kind: 'fallback', message: '定向修复后使用降级解析结果。' });
+      return cues;
     } catch {
       throw invalidResponseError(lastError);
     }
   };
 
   onProgress?.('translating');
-  let content = await postProviderResponse(settings, messages, responseFormat, signal);
+  let content = await postProviderResponse(settings, messages, responseFormat, signal, runtime);
   let lastError: unknown;
 
   try {
@@ -373,6 +385,10 @@ export async function translateTokenWindow(
     if (reviewIssue) throw new Error(reviewIssue);
     return cues;
   } catch (error) {
+    runtime.onDiagnostic?.({
+      kind: 'validation-error',
+      message: error instanceof Error ? error.message : String(error),
+    });
     if (error instanceof AiSubtitleBoundaryError) {
       return repairBoundaryUnits(content, error);
     }
@@ -392,11 +408,16 @@ export async function translateTokenWindow(
     ],
     responseFormat,
     signal,
+    runtime,
   );
 
   try {
     return parseAiSubtitleOutput(content, tokens, correctionEnabled, context);
   } catch (error) {
+    runtime.onDiagnostic?.({
+      kind: 'validation-error',
+      message: error instanceof Error ? error.message : String(error),
+    });
     if (error instanceof AiSubtitleBoundaryError) {
       return repairBoundaryUnits(content, error);
     }
@@ -411,6 +432,7 @@ export async function resolveVideoEntityAliases(
   candidates: readonly TranscriptEntityCandidate[],
   context: EntityResolutionContext = {},
   signal?: AbortSignal,
+  runtime: ProviderRuntime = {},
 ): Promise<TranslationTerm[]> {
   if (candidates.length < 2) return [];
   const content = await postProviderResponse(
@@ -425,6 +447,7 @@ export async function resolveVideoEntityAliases(
       },
     },
     signal,
+    runtime,
   );
   try {
     const anchoredAliases = parseEntityAliasOutput(content, candidates, context);
@@ -465,6 +488,7 @@ export async function resolveVideoEntityAliases(
         },
       },
       signal,
+      runtime,
     );
     const attachedAliases = parseEntityAliasAttachmentOutput(
       attachmentContent,

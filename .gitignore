@@ -26,3 +26,4 @@ Thumbs.db
 
 # Downloaded subtitle fixtures
 .fixtures/
+.eval/
