@@ -25,6 +25,8 @@
   --accent: #b6450f;
   --primary-fill: #b6450f;
   --danger: #925448;
+  --scrollbar-thumb: #918a81;
+  --menu-shadow: 0 6px 20px rgb(56 45 30 / 0.18);
   --text-body: 0.875rem;
   --text-title: 1.5rem;
   background: var(--paper);
@@ -43,11 +45,34 @@
     --line: #414141;
     --accent: #ff9859;
     --danger: #deb4ad;
+    --scrollbar-thumb: #737373;
+    --menu-shadow: 0 6px 24px rgb(0 0 0 / 0.4);
   }
 }
 
 * {
   box-sizing: border-box;
+}
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  min-height: 28px;
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background-color: var(--scrollbar-thumb);
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--ink-secondary);
+}
+::-webkit-scrollbar-button {
+  display: none;
 }
 [hidden] {
   display: none !important;
@@ -789,8 +814,8 @@ summary:focus-visible {
   font: inherit;
 }
 .subtitle-source .quiet-button {
-  min-height: 28px;
-  padding: 4px 0;
+  min-height: 32px;
+  padding: 6px 10px;
   color: var(--accent);
   font-size: 0.75rem;
 }
@@ -1010,13 +1035,6 @@ summary:focus-visible {
 .subtitle-row.is-current .cue-text {
   font-weight: 600;
 }
-.subtitle-list,
-.dialog-body,
-.welcome-scroll,
-.subtitle-source-options {
-  scrollbar-width: thin;
-  scrollbar-color: var(--line) transparent;
-}
 input,
 textarea {
   caret-color: var(--accent);
@@ -1209,6 +1227,90 @@ textarea {
   transform: translateY(-50%);
   pointer-events: none;
   color: var(--ink-secondary);
+}
+.select-control:has(select:disabled) > svg {
+  opacity: 0.5;
+}
+/* Keep the browser's select behavior, including top-layer placement and keyboard navigation. */
+@supports (appearance: base-select) {
+  .select-control select,
+  .select-control select::picker(select) {
+    appearance: base-select;
+  }
+  .select-control select::picker-icon {
+    display: none;
+  }
+  .select-control select {
+    cursor: pointer;
+    align-items: center;
+  }
+  .select-control select:open {
+    border-color: var(--accent);
+  }
+  .select-control select::picker(select) {
+    min-width: anchor-size(width);
+    max-width: calc(100vw - 24px);
+    max-height: min(280px, calc(100dvh - 32px));
+    margin-block: 4px;
+    padding: 4px;
+    border: 0;
+    border-radius: 10px;
+    background: var(--surface);
+    color: var(--ink);
+    box-shadow: var(--menu-shadow);
+    font:
+      400 0.8125rem / 1.5 'MiSans',
+      'Mi Sans',
+      'PingFang SC',
+      'Microsoft YaHei',
+      system-ui,
+      sans-serif;
+    overflow: auto;
+    overscroll-behavior: contain;
+  }
+  .select-control option {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 34px;
+    padding: 7px 10px;
+    border-radius: 6px;
+    font: inherit;
+    color: var(--ink);
+    cursor: pointer;
+  }
+  .select-control option:hover {
+    background: var(--surface-muted);
+  }
+  .select-control option:checked {
+    color: var(--accent);
+    background: var(--surface-muted);
+    font-weight: 600;
+  }
+  .select-control option:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+  }
+  .select-control option::checkmark {
+    order: 1;
+    margin-left: auto;
+    color: var(--accent);
+  }
+  .select-control select:disabled,
+  .select-control option:disabled {
+    cursor: not-allowed;
+  }
+  .select-control option:disabled {
+    opacity: 0.5;
+  }
+}
+@media (forced-colors: active) {
+  ::-webkit-scrollbar-thumb {
+    background-color: CanvasText;
+  }
+  .select-control select::picker(select) {
+    border: 1px solid CanvasText;
+  }
 }
 .player-tools .select-control {
   flex-shrink: 0;

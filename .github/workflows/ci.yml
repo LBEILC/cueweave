@@ -65,6 +65,9 @@ jobs:
       - name: Run real Electron smoke checks
         run: npm run test:desktop:smoke
 
+      - name: Verify themed desktop controls
+        run: node apps/desktop/scripts/controls-acceptance.mjs
+
       - name: Build Windows installer
         if: github.event_name == 'workflow_dispatch' && inputs.build_installer
         run: npm run dist:desktop

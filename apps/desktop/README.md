@@ -50,6 +50,7 @@ npm run dist:desktop
 ```bash
 npm run typecheck --workspace @cueweave/desktop
 npm run test:desktop:smoke
+node apps/desktop/scripts/controls-acceptance.mjs
 npm run test:desktop:project
 npm run test:desktop:settings
 npm run pack:desktop
@@ -62,6 +63,8 @@ npm run test:desktop:installer
 冒烟检查使用隐藏的真实 Electron 窗口，覆盖生产资源与开发服务器加载、隔离桥接、DOM 播放器的 MP4 与 WebM 播放和 seek、关于页面及关闭退出。D0 产物验收覆盖 Range、媒体探测矩阵、音频提取、SQLite 关闭重开、工具取消、服务崩溃重连和退出清理；链接验收覆盖直链 Range 流式播放、重定向、取消续传、YouTube 与哔哩哔哩在线播放和 YouTube 独立下载，需要网络；安装包验收再执行静默安装、已安装应用检查和卸载。脚本生成的媒体、隔离用户数据、报告和截图分别写入已忽略的 `.fixtures/desktop/` 与 `.impeccable/review/`，不使用日常应用数据，也不涉及 ASR 或模型密钥。
 
 所有自动媒体检查均静音启动；测试窗口的音频输出也被禁用，不修改系统音量或正常使用时的播放设置。布局回归覆盖 1120×720、960×640、640×480、浅深色主题、503 条字幕的搜索与独立滚动，以及导入/关于前后的媒体元素和暂停位置连续性。样本用于验证布局和播放路径，不替代真实长视频性能或听音验收。
+
+控件验收在冒烟测试生成媒体样本后运行，覆盖字幕按钮左右留白、浅深色自定义原生下拉菜单、窗口边缘与全屏、鼠标选择、键盘选择、Esc 关闭及统一滚动条。截图和报告位于 `.impeccable/review/desktop-controls/`。下拉仍由浏览器提供语义与操作，打开时优先处理 Esc；关闭后 Esc 恢复所属页面行为。
 
 只复验本机直链、下载与取消续传，可在 PowerShell 中执行：
 
