@@ -1,4 +1,5 @@
 import type { SourceToken } from './types';
+import { withoutDimensions } from './numeric';
 
 const TRANSCRIPT_EVIDENCE_STOP_WORDS = new Set([
   'A',
@@ -43,7 +44,7 @@ export function extractTranscriptEvidenceTerms(
   limit = 80,
 ): string[] {
   const candidates = tokens.map((token) => {
-    const match = token.text
+    const match = withoutDimensions(token.text)
       .normalize('NFKC')
       .match(/[A-Za-z][A-Za-z0-9]*(?:[-_.][A-Za-z0-9]+)*/u)?.[0];
     return match &&
@@ -81,6 +82,7 @@ function normalizedPhrase(value: string): string {
 }
 
 export function extractUnitTechnicalEntities(sourceText: string): string[] {
+  sourceText = withoutDimensions(sourceText);
   const entities = new Map<string, string>();
   const remember = (value: string | undefined) => {
     if (!value || TRANSCRIPT_EVIDENCE_STOP_WORDS.has(value)) return;

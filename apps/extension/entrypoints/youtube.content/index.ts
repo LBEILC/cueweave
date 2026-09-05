@@ -562,38 +562,58 @@ async function runWindowTranslation(
     if (!active()) return;
     tokenWindows = plan.windows();
     scheduleBufferPump();
-    const previousCues = translatedCues
-      .filter((cue) => cue.endMs < window.startMs)
-      .slice(-6)
-      .map((cue) => ({ sourceText: cue.sourceText, translation: cue.translation }));
-    // A planning job can be promoted before its translation request has been enqueued.
-    priority = windowStates.get(window.id)?.priority ?? priority;
-    const result = (await browser.runtime.sendMessage({
-      type: TRANSLATE_WINDOW_MESSAGE,
-      tokens: window.tokens,
-      context: {
-        videoId: state.videoId ?? '',
-        languageCode: state.languageCode ?? '',
-        windowId: window.id,
-        sessionId: requestTranslationSessionId,
-        ...currentVideoContext(),
-        correctionEnabled: subtitlePreferences.transcriptCorrectionEnabled,
-      },
-      priority,
-      previousCues,
-      neighbors: sourceNeighbors(sourceTokens, window.tokens),
-    })) as TranslateWindowResult;
-    if (!active()) return;
-    if (!result.ok) throw new ProviderError(result.error.code, result.error.message);
+    // Keep disjoint gaps separate: removing accepted tokens must not invent a continuous range.
+    const accepted = new Set(translatedCues.flatMap((cue) => cue.sourceTokenIds));
+    const ranges: SourceToken[][] = [];
+    let gap: SourceToken[] = [];
+    for (const token of window.tokens) {
+      if (accepted.has(token.id)) {
+        if (gap.length) ranges.push(gap);
+        gap = [];
+      } else gap.push(token);
+    }
+    if (gap.length) ranges.push(gap);
+    let receivedCues = 0;
+    let cacheHit = true;
+    for (const range of ranges) {
+      const previousCues = translatedCues
+        .filter((cue) => cue.endMs < range[0]!.startMs)
+        .slice(-6)
+        .map((cue) => ({ sourceText: cue.sourceText, translation: cue.translation }));
+      // A planning job can be promoted before its translation request has been enqueued.
+      priority = windowStates.get(window.id)?.priority ?? priority;
+      const result = (await browser.runtime.sendMessage({
+        type: TRANSLATE_WINDOW_MESSAGE,
+        tokens: range,
+        context: {
+          videoId: state.videoId ?? '',
+          languageCode: state.languageCode ?? '',
+          windowId: window.id,
+          sessionId: requestTranslationSessionId,
+          ...currentVideoContext(),
+          correctionEnabled: subtitlePreferences.transcriptCorrectionEnabled,
+        },
+        priority,
+        previousCues,
+        neighbors: sourceNeighbors(sourceTokens, range),
+      })) as TranslateWindowResult;
+      if (!active()) return;
+      if (!result.ok) {
+        if (result.cues?.length) mergeTranslatedCues(result.cues);
+        throw new ProviderError(result.error.code, result.error.message);
+      }
+      mergeTranslatedCues(result.cues);
+      receivedCues += result.cues.length;
+      cacheHit &&= result.cacheHit;
+    }
     windowStates.set(window.id, { status: 'ready', priority });
-    mergeTranslatedCues(result.cues);
     logTranslationEvent('success', {
       priority,
       startMs: window.startMs,
       endMs: window.endMs,
       durationMs: Math.round(performance.now() - requestStartedAt),
-      cacheHit: result.cacheHit,
-      cueCount: result.cues.length,
+      cacheHit,
+      cueCount: receivedCues,
     });
   } catch (error) {
     if (!active()) return;

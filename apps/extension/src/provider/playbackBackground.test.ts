@@ -94,6 +94,43 @@ const translationMessage = {
 };
 
 describe('extension background playback wiring', () => {
+  it('delivers valid partial cues without caching the incomplete window', async () => {
+    const app = await background();
+    app.fetchMock.mockImplementation(
+      async () =>
+        new Response(
+          JSON.stringify({
+            choices: [
+              {
+                finish_reason: 'stop',
+                message: {
+                  content: JSON.stringify({
+                    units: [
+                      { startIndex: 0, endIndex: 0, translation: '你好', sentenceEnd: true },
+                      { startIndex: 1, endIndex: 1, translation: 'GPT-4o', sentenceEnd: true },
+                    ],
+                    corrections: [],
+                    terminology: [],
+                  }),
+                },
+              },
+            ],
+          }),
+        ),
+    );
+    const result = await app.send({
+      ...translationMessage,
+      tokens: [...tokens, { ...tokens[0], id: 'model', text: 'Astra', startMs: 2000, endMs: 4000 }],
+    });
+    expect(result).toMatchObject({
+      ok: false,
+      cues: [expect.objectContaining({ translation: '你好' })],
+      missingTokenIds: ['model'],
+    });
+    expect(
+      await app.send({ type: GET_TRANSLATION_CACHE_STATS_MESSAGE, videoId: 'video' }),
+    ).toMatchObject({ ok: true, stats: { entryCount: 0 } });
+  });
   it('opens and restores the planning protocol, translates with first-pass, then reuses cache', async () => {
     const app = await background();
     const opened = (await app.send({

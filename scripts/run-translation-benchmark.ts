@@ -7,7 +7,12 @@ import type { AiSubtitleContext } from '@cueweave/core/subtitle/ai';
 import {
   createSubtitleJsonRequest,
   translatePlaybackWindow,
+  PartialTranslationError,
 } from '@cueweave/core/provider/chatCompletions';
+import {
+  TRANSLATION_POLICY_VERSION,
+  type TranslationMode,
+} from '@cueweave/core/provider/translationPolicy';
 import { PlaybackPlan, sourceNeighbors } from '@cueweave/core/provider/playbackPlan';
 import { DEFAULT_PROVIDER_SETTINGS } from '@cueweave/core/provider/settings';
 import type { ProviderSettings } from '@cueweave/core/provider/types';
@@ -34,6 +39,7 @@ interface CaseResult {
   status: 'running' | 'success' | 'partial' | 'failed';
   startedAt: string;
   durationMs: number;
+  firstUsableMs?: number;
   inputSha256: string;
   attempts: Attempt[];
   plan: ReturnType<PlaybackPlan['snapshot']>;
@@ -59,6 +65,7 @@ const { values } = parseArgs({
     out: { type: 'string' },
     dataset: { type: 'string', default: '.fixtures/translation-benchmark/v1' },
     group: { type: 'string', default: 'smoke' },
+    mode: { type: 'string', default: 'balanced' },
     model: { type: 'string' },
     'base-url': { type: 'string' },
     protocol: { type: 'string' },
@@ -74,12 +81,15 @@ let secret = '';
 async function main(): Promise<void> {
   if (values.help) {
     console.log(
-      'Production first-pass benchmark (no reference/judge input).\n--out .eval/benchmarks/<new-directory> --group smoke|development|holdout|diagnostic|all --token-file <file> [--model id] [--base-url url] [--protocol auto|chat-completions|responses] [--max-requests 150] [--resume] [--dry-run]',
+      'Production first-pass benchmark (no reference/judge input).\n--out .eval/benchmarks/<new-directory> --group smoke|development|holdout|diagnostic|all --token-file <file> [--mode speed|balanced] [--model id] [--base-url url] [--protocol auto|chat-completions|responses] [--max-requests 150] [--resume] [--dry-run]',
     );
     return;
   }
   const groups = ['smoke', 'development', 'holdout', 'diagnostic', 'all'];
   if (!groups.includes(values.group)) throw new Error('未知测试集分组');
+  if (!['speed', 'balanced'].includes(values.mode))
+    throw new Error('mode 必须为 speed 或 balanced');
+  const mode = values.mode as TranslationMode;
   if (!values.out) throw new Error('缺少 --out');
   const directory = path.resolve(values.out);
   if (!path.relative(PROJECT_ROOT, directory).replaceAll('\\', '/').startsWith('.eval/'))
@@ -125,6 +135,8 @@ async function main(): Promise<void> {
     protocol: protocol as ProviderSettings['protocol'],
   };
   const identity = {
+    mode,
+    policyVersion: TRANSLATION_POLICY_VERSION,
     model: settings.model,
     baseUrl: settings.baseUrl,
     protocol: settings.protocol,
@@ -185,7 +197,7 @@ async function main(): Promise<void> {
       if (controller.signal.aborted || budget.exhausted) break;
       if (run.results[entry.id]?.at(-1)?.status === 'success') continue;
       const input = inputs.get(entry.id)!;
-      const plan = new PlaybackPlan(input.tokens);
+      const plan = new PlaybackPlan(input.tokens, undefined, mode);
       const started = performance.now();
       const result: CaseResult = {
         status: 'running',
@@ -245,7 +257,7 @@ async function main(): Promise<void> {
           try {
             const window = await plan.prepare(
               w,
-              createSubtitleJsonRequest(settings, controller.signal, undefined, runtime),
+              createSubtitleJsonRequest(settings, controller.signal, undefined, runtime, mode),
               controller.signal,
               async (snapshot) => {
                 result.plan = snapshot;
@@ -255,6 +267,7 @@ async function main(): Promise<void> {
             );
             const context: AiSubtitleContext = {
               ...input.context,
+              translationMode: mode,
               terminology: [...terms.values()].slice(-80),
               previousCues: result.cues
                 .filter((cue) => cue.endMs < window.startMs)
@@ -272,11 +285,19 @@ async function main(): Promise<void> {
               runtime,
             );
             result.cues.push(...attempt.cues);
+            if (attempt.cues.length && result.firstUsableMs === undefined)
+              result.firstUsableMs = Math.round(performance.now() - started);
             for (const cue of attempt.cues)
               for (const term of cue.terminology ?? [])
                 terms.set(term.source.toLocaleLowerCase(), term);
             attempt.status = 'success';
           } catch (error) {
+            if (error instanceof PartialTranslationError) {
+              attempt.cues = error.cues;
+              result.cues.push(...error.cues);
+              if (error.cues.length && result.firstUsableMs === undefined)
+                result.firstUsableMs = Math.round(performance.now() - started);
+            }
             attempt.status = 'failed';
             attempt.error = error instanceof Error ? error.message : String(error);
             if (

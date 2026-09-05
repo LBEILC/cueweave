@@ -1,4 +1,5 @@
 import type { SourceToken, TranslationTerm } from './types';
+import { withoutDimensions } from './numeric';
 
 const MAX_ENTITY_CANDIDATES = 48;
 const MAX_CONTEXTS_PER_CANDIDATE = 3;
@@ -96,7 +97,7 @@ function compactPhrase(value: string): string {
 }
 
 function identifier(value: string): string | undefined {
-  return value.normalize('NFKC').match(/[A-Za-z][A-Za-z0-9]*(?:[-_.][A-Za-z0-9]+)*/u)?.[0];
+  return withoutDimensions(value).match(/[A-Za-z][A-Za-z0-9]*(?:[-_.][A-Za-z0-9]+)*/u)?.[0];
 }
 
 function isAcronym(value: string): boolean {

@@ -219,3 +219,7 @@ node --import tsx scripts/experiment-first-pass.ts --out .eval/runs/first-pass-t
 定位未收到 HTTP 响应的连接失败时，可在命令的脚本路径前增加 `--import ./scripts/eval/network-diagnostics.ts`。它仅向标准错误输出异常名称和底层错误码，不输出请求头或密钥；原异常仍交回评测入口处理。
 
 只验证本地解析或元数据修正时，可以用 `scripts/replay-first-pass.ts --from <完整首轮运行目录> --out <审计 JSON 路径>` 回放已保存响应，无需密钥或模型请求。它核对阶段提示词、字幕文本、范围和元数据；提示词变化或缺少阶段日志会产生差异，不能据此替代新提示词的真实模型实验。
+
+## 速度与质量策略对照
+
+目标、实验档位、局部交付行为和运行方法见 [TRANSLATION-STRATEGY.md](TRANSLATION-STRATEGY.md)。`run-translation-benchmark.ts` 支持 `--mode speed|balanced`，默认 balanced；`compare-translation-strategies.ts` 对相同输入与源码的多轮结果比较首次可用、整段耗时、请求数和缺失量。完整覆盖不等于语义正确。

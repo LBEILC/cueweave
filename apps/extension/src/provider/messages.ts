@@ -157,7 +157,8 @@ export interface TranslationProgressMessage {
 }
 
 export type TranslateWindowResult =
-  { ok: true; cues: DisplayCue[]; cacheHit: boolean } | { ok: false; error: ProviderFailure };
+  | { ok: true; cues: DisplayCue[]; cacheHit: boolean }
+  | { ok: false; error: ProviderFailure; cues?: DisplayCue[]; missingTokenIds?: string[] };
 
 export type TestProviderResult = ProviderTestResult;
 

@@ -191,6 +191,56 @@ function success(message: TranslateWindowMessage): TranslateWindowResult {
 }
 
 describe('content-script buffer scheduling', () => {
+  it('retries disjoint missing ranges without resending already accepted tokens', async () => {
+    let acceptedIds: string[] = [];
+    const app = await player(true, (message, count) => {
+      if (count > 1 || message.context.windowId !== 'playback:0') return success(message);
+      const middle = message.tokens.slice(2, 4);
+      const accepted = success({ ...message, tokens: middle });
+      if (!accepted.ok) throw new Error('fixture');
+      accepted.cues[0]!.id = 'partial-middle';
+      acceptedIds = middle.map((t) => t.id);
+      return {
+        ok: false,
+        error: { code: 'invalid-response', message: 'Partial' },
+        cues: accepted.cues,
+      };
+    });
+    await vi.advanceTimersByTimeAsync(1000);
+    app.render();
+    app.overlay.action.dispatchEvent(new Event('click'));
+    await vi.advanceTimersByTimeAsync(1000);
+    const requests = app.calls.filter((c) => c.context.windowId === 'playback:0');
+    expect(requests).toHaveLength(3);
+    expect(requests[1]!.tokens.map((t) => t.id)).toEqual(
+      requests[0]!.tokens.slice(0, 2).map((t) => t.id),
+    );
+    expect(requests[2]!.tokens.map((t) => t.id)).toEqual(
+      requests[0]!.tokens.slice(4).map((t) => t.id),
+    );
+    expect(
+      requests
+        .slice(1)
+        .flatMap((r) => r.tokens)
+        .some((t) => acceptedIds.includes(t.id)),
+    ).toBe(false);
+  });
+  it('shows accepted partial subtitles while leaving the window incomplete', async () => {
+    const app = await player(true, (message) => {
+      const accepted = success({ ...message, tokens: message.tokens.slice(0, 2) });
+      if (!accepted.ok) throw new Error('fixture');
+      return {
+        ok: false,
+        error: { code: 'invalid-response', message: 'Partial translation' },
+        cues: accepted.cues,
+        missingTokenIds: message.tokens.slice(2).map((t) => t.id),
+      };
+    });
+    await vi.advanceTimersByTimeAsync(1000);
+    app.render();
+    expect(app.overlay.translation.textContent).toBe('译文');
+    expect((await app.state()).bufferedSeconds).toBe(0);
+  });
   it('keeps a translated pause empty instead of showing an early source-only fallback at 6:59', async () => {
     const app = await player(
       true,

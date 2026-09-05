@@ -3,6 +3,8 @@ import type { ProviderRuntime } from '@cueweave/core/provider/runtime';
 import { ProviderError, type ProviderSettings } from '@cueweave/core/provider/types';
 import { providerOriginPattern } from './settings';
 
+export const PartialTranslationError = provider.PartialTranslationError;
+
 async function assertProviderPermission(settings: ProviderSettings): Promise<void> {
   const origin = providerOriginPattern(settings.baseUrl);
   const allowed = await browser.permissions.contains({ origins: [origin] });
@@ -23,7 +25,9 @@ export const createSubtitleJsonRequest: typeof provider.createSubtitleJsonReques
   signal,
   onProgress,
   runtime,
-) => provider.createSubtitleJsonRequest(settings, signal, onProgress, extensionRuntime(runtime));
+  mode,
+) =>
+  provider.createSubtitleJsonRequest(settings, signal, onProgress, extensionRuntime(runtime), mode);
 
 export const translatePlaybackWindow: typeof provider.translatePlaybackWindow = (
   settings,

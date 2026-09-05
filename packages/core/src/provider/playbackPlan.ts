@@ -1,6 +1,8 @@
 import { createTokenWindows, type SourceToken, type TokenWindow } from '../domain/subtitle/index';
 import type { SubtitleJsonRequest } from './firstPass';
 import { ProviderError } from './types';
+import { translationPolicy, type TranslationMode } from './translationPolicy';
+import { localPlaybackSeam } from './localSeam';
 
 export const PLAYBACK_PLAN_VERSION = 'rolling-playback-v1';
 export interface PlanSnapshot {
@@ -168,6 +170,7 @@ export class PlaybackPlan {
   constructor(
     readonly tokens: readonly SourceToken[],
     saved?: unknown,
+    private readonly mode: TranslationMode = 'balanced',
   ) {
     let end = 0;
     const windows = createTokenWindows(tokens);
@@ -205,8 +208,13 @@ export class PlaybackPlan {
           const start = this.state.ends[seam - 1] ?? 0;
           const end = this.state.ends[seam + 1]!;
           const pair = this.tokens.slice(start, end);
+          if (!translationPolicy(this.mode).modelSeams)
+            this.state.ends[seam] = start + localPlaybackSeam(pair, this.state.ends[seam]! - start);
           // Very short video tails cannot meet the experiment's two-window minimum.
-          if (pair.at(-1)!.endMs - pair[0]!.startMs >= 24_000) {
+          if (
+            translationPolicy(this.mode).modelSeams &&
+            pair.at(-1)!.endMs - pair[0]!.startMs >= 24_000
+          ) {
             try {
               const content = await request(
                 'rolling-seam',

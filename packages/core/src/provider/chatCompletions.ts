@@ -29,12 +29,27 @@ import type { TranslationProgressStage } from './types';
 import type { ProviderRuntime } from './runtime';
 import { SubtitleResponseError } from './completeOutput';
 import { translateFirstPass, type SubtitleJsonRequest } from './firstPass';
+import { translationPolicy, type TranslationMode } from './translationPolicy';
+
 import {
   ProviderError,
   type ProviderProtocol,
   type ProviderSettings,
   type ProviderTestResult,
 } from './types';
+
+export class PartialTranslationError extends ProviderError {
+  constructor(
+    readonly cues: DisplayCue[],
+    readonly missingTokenIds: string[],
+  ) {
+    super(
+      'invalid-response',
+      `字幕尚有 ${missingTokenIds.length} 个原文词元未完成翻译，已保留可用字幕。请重试缺失范围。`,
+    );
+    this.name = 'PartialTranslationError';
+  }
+}
 
 interface ChatCompletionResponse {
   choices?: Array<{
@@ -323,12 +338,13 @@ function retryDelay(signal?: AbortSignal): Promise<void> {
   });
 }
 
-/** Shared browser transport; retries a transient failure once, never authentication or cancellation. */
+/** Shared browser transport with mode-specific transient retries, never authentication or cancellation. */
 export function createSubtitleJsonRequest(
   settings: ProviderSettings,
   signal?: AbortSignal,
   onProgress?: (stage: TranslationProgressStage) => void,
   runtime: ProviderRuntime = {},
+  mode: TranslationMode = 'balanced',
 ): SubtitleJsonRequest {
   return async (stage, prompt, schema) => {
     runtime.onDiagnostic?.({ kind: 'stage', message: stage });
@@ -356,7 +372,7 @@ export function createSubtitleJsonRequest(
       } catch (error) {
         assertNotCancelled(signal);
         if (
-          attempt > 0 ||
+          attempt >= translationPolicy(mode).transientRetries ||
           !(error instanceof ProviderError) ||
           !error.retryable ||
           !['network', 'timeout', 'rate-limited'].includes(error.code)
@@ -383,16 +399,13 @@ export async function translatePlaybackWindow(
     tokens,
     context,
     neighbors,
-    createSubtitleJsonRequest(settings, signal, onProgress, runtime),
+    createSubtitleJsonRequest(settings, signal, onProgress, runtime, context.translationMode),
   );
   assertNotCancelled(signal);
   for (const message of result.diagnostics)
     runtime.onDiagnostic?.({ kind: 'validation-error', message });
   if (result.missingTokenIds.length) {
-    throw new ProviderError(
-      'invalid-response',
-      `字幕尚有 ${result.missingTokenIds.length} 个原文词元未完成翻译，未标记为已完成。请重试此处。`,
-    );
+    throw new PartialTranslationError(result.cues, result.missingTokenIds);
   }
   return result.cues;
 }

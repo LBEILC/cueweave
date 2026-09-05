@@ -22,6 +22,7 @@ import {
   createSubtitleJsonRequest,
   testProviderConnection,
   translatePlaybackWindow,
+  PartialTranslationError,
 } from '../src/provider/chatCompletions';
 import { FIRST_PASS_VERSION } from '@cueweave/core/provider/firstPass';
 import { PLAYBACK_PLAN_VERSION } from '@cueweave/core/provider/playbackPlan';
@@ -414,6 +415,9 @@ async function translateWindowMessage(
     await debug.record('window-failure', debugError(error));
     return {
       ok: false,
+      ...(error instanceof PartialTranslationError
+        ? { cues: error.cues, missingTokenIds: error.missingTokenIds }
+        : {}),
       error:
         error instanceof ProviderError
           ? { code: error.code, message: error.message }

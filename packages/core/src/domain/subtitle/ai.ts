@@ -6,6 +6,8 @@ import type {
   TranslationTerm,
 } from './types';
 import { extractUnitTechnicalEntities } from './evidence';
+import { dimensionValues, withoutDimensions } from './numeric';
+import type { TranslationMode } from '../../provider/translationPolicy';
 
 interface AiSubtitleUnit {
   startIndex: number;
@@ -29,6 +31,7 @@ interface AiTranscriptCorrection {
 }
 
 export interface AiSubtitleContext {
+  translationMode?: TranslationMode;
   videoTitle?: string;
   channelName?: string;
   videoDescription?: string;
@@ -93,7 +96,7 @@ const LONG_SEMANTIC_CONNECTORS = new Set([
   'while',
 ]);
 
-export const AI_PROMPT_VERSION = 'prompt-v14';
+export const AI_PROMPT_VERSION = 'prompt-v15';
 export const DISPLAY_SEGMENTATION_VERSION = 'display-v10';
 
 export const AI_SUBTITLE_SCHEMA = {
@@ -383,6 +386,13 @@ function assertUnitEntitiesAreAligned(
   translation: string,
   context: AiSubtitleContext,
 ): void {
+  const sourceDimensions = dimensionValues(sourceText);
+  const translatedDimensions = dimensionValues(translation);
+  if (
+    sourceDimensions.some((value) => !translatedDimensions.includes(value)) ||
+    translatedDimensions.some((value) => !sourceDimensions.includes(value))
+  )
+    throw new Error('当前字幕的数字尺寸缺失或改变，请保留原值，可使用 x、× 或乘等价表示。');
   const missing = extractUnitTechnicalEntities(sourceText).find((entity) => {
     const allowedValues = [
       entity,
@@ -410,7 +420,7 @@ function unsupportedTranslationIdentifier(
   tokens: readonly SourceToken[],
   context: AiSubtitleContext,
 ): string | undefined {
-  const identifiers = translation.match(LATIN_IDENTIFIER) ?? [];
+  const identifiers = withoutDimensions(translation).match(LATIN_IDENTIFIER) ?? [];
   return identifiers.find(
     (identifier) =>
       (/[A-Z]/u.test(identifier) || /\d/u.test(identifier)) &&
