@@ -17,7 +17,7 @@ import {
 const tokens = Array.from({ length: 120 }, (_, i) => ({
   id: `t${i}`,
   cueId: 'c',
-  text: i % 30 === 29 ? 'end.' : 'word',
+  text: 'word',
   startMs: i * 1000,
   endMs: (i + 1) * 1000,
 }));
@@ -41,6 +41,15 @@ const settings: ProviderSettings = {
 };
 
 describe('live rolling windows', () => {
+  it('uses a clear local sentence ending without paying for a model seam call', async () => {
+    const source = tokens.map((t, i) => ({ ...t, text: i % 30 === 29 ? 'end.' : 'word' }));
+    const plan = new PlaybackPlan(source);
+    const request = vi.fn();
+    await plan.prepare(0, request);
+    expect(request).not.toHaveBeenCalled();
+    expect(plan.snapshot().finalized[0]).toBe(true);
+    expect(plan.window(0).tokens).toEqual(source.slice(0, 30));
+  });
   it('rolls the pending right window forward and freezes both edges of translated windows', async () => {
     const plan = new PlaybackPlan(tokens);
     const request = vi
@@ -256,6 +265,27 @@ describe('plan persistence and message lifecycle', () => {
     ).toBe(true);
     expect(
       isPreparePlaybackWindowMessage({ type: 'cueweave:prepare-playback-window', index: -1 }),
+    ).toBe(false);
+  });
+
+  it('isolates each mode and gives quality its own window sizes', async () => {
+    const plans = new PlaybackPlans(store());
+    const opened = await Promise.all(
+      (['speed', 'balanced', 'quality'] as const).map((mode) =>
+        plans.open('v', 'en', tokens, settings, mode),
+      ),
+    );
+    expect(new Set(opened.map((p) => p.key)).size).toBe(3);
+    expect(opened[2]!.snapshot.ends).not.toEqual(opened[1]!.snapshot.ends);
+    expect(plans.get(opened[2]!.key)?.mode).toBe('quality');
+    expect(
+      isOpenPlaybackPlanMessage({
+        type: 'cueweave:open-playback-plan',
+        videoId: 'v',
+        languageCode: 'en',
+        tokens,
+        translationMode: 'unknown',
+      }),
     ).toBe(false);
   });
 });

@@ -13,6 +13,8 @@ import {
 } from '@cueweave/core/provider/playbackPlan';
 import { ProviderError } from '@cueweave/core/provider/types';
 
+import type { TranslationMode } from '@cueweave/core/provider/translationPolicy';
+
 export class PlaybackPlanClient {
   private opening: Promise<string> | undefined;
   private key = '';
@@ -22,8 +24,9 @@ export class PlaybackPlanClient {
     private videoId: string,
     private languageCode: string,
     private send: (message: object) => Promise<PlaybackPlanResult>,
+    private mode: TranslationMode = 'balanced',
   ) {
-    this.snapshot = new PlaybackPlan(tokens).snapshot();
+    this.snapshot = new PlaybackPlan(tokens, undefined, mode).snapshot();
   }
   windows(): TokenWindow[] {
     return windowsFromSnapshot(this.tokens, this.snapshot);
@@ -44,6 +47,7 @@ export class PlaybackPlanClient {
       videoId: this.videoId,
       languageCode: this.languageCode,
       tokens: this.tokens,
+      translationMode: this.mode,
     })
       .then((r) => this.accept(r))
       .catch((error) => {

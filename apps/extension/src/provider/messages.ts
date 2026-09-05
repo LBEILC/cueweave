@@ -8,6 +8,10 @@ import type {
 import type { ProviderFailure, ProviderTestResult } from '@cueweave/core/provider/types';
 import type { PlanSnapshot } from '@cueweave/core/provider/playbackPlan';
 
+import type { TranslationMode } from '@cueweave/core/provider/translationPolicy';
+const validTranslationMode = (value: unknown) =>
+  value === undefined || value === 'speed' || value === 'balanced' || value === 'quality';
+
 export const OPEN_PLAYBACK_PLAN_MESSAGE = 'cueweave:open-playback-plan';
 export const PREPARE_PLAYBACK_WINDOW_MESSAGE = 'cueweave:prepare-playback-window';
 export const PROMOTE_PLAYBACK_WINDOW_MESSAGE = 'cueweave:promote-playback-window';
@@ -31,6 +35,7 @@ export function isPromotePlaybackWindowMessage(
   );
 }
 export interface OpenPlaybackPlanMessage {
+  translationMode?: TranslationMode;
   type: typeof OPEN_PLAYBACK_PLAN_MESSAGE;
   videoId: string;
   languageCode: string;
@@ -84,6 +89,7 @@ export function isOpenPlaybackPlanMessage(value: unknown): value is OpenPlayback
     typeof v.languageCode === 'string' &&
     v.languageCode.length > 0 &&
     v.languageCode.length <= 32 &&
+    validTranslationMode(v.translationMode) &&
     validSourceTokens(v.tokens)
   );
 }
@@ -119,6 +125,7 @@ export const DELETE_VIDEO_GLOSSARY_TERM_MESSAGE = 'cueweave:delete-video-glossar
 export type { TranslationPriority, TranslationProgressStage } from '@cueweave/core/provider/types';
 
 export interface TranslationContext {
+  translationMode?: TranslationMode;
   videoId: string;
   languageCode: string;
   windowId: string;
@@ -312,6 +319,9 @@ export function isTranslateWindowMessage(value: unknown): value is TranslateWind
     typeof value.context.windowId === 'string' &&
     'sessionId' in value.context &&
     typeof value.context.sessionId === 'string' &&
+    validTranslationMode(
+      'translationMode' in value.context ? value.context.translationMode : undefined,
+    ) &&
     'correctionEnabled' in value.context &&
     typeof value.context.correctionEnabled === 'boolean' &&
     (!('videoTitle' in value.context) ||

@@ -2,10 +2,17 @@ import type { SourceToken } from '../domain/subtitle/types';
 
 /** Cheap source-only seam adjustment. This is a heuristic, not a semantic guarantee. */
 export function localPlaybackSeam(tokens: readonly SourceToken[], original: number): number {
+  return localPlaybackSeamDecision(tokens, original).cut;
+}
+
+export function localPlaybackSeamDecision(
+  tokens: readonly SourceToken[],
+  original: number,
+): { cut: number; confident: boolean } {
   let best = original;
   let bestScore = 0;
   const anchor = tokens[original - 1];
-  if (!anchor || original >= tokens.length) return original;
+  if (!anchor || original >= tokens.length) return { cut: original, confident: false };
   for (
     let cut = Math.max(1, original - 30);
     cut <= Math.min(tokens.length - 1, original + 30);
@@ -25,7 +32,9 @@ export function localPlaybackSeam(tokens: readonly SourceToken[], original: numb
       )
     )
       continue;
-    const strong = /[.!?]["'”’)]*$/.test(left.text);
+    const strong =
+      /[.!?]["'”’)]*$/.test(left.text) &&
+      !/^(?:Mr|Mrs|Ms|Dr|Prof|vs|etc|e\.g|i\.e|[A-Z])\.$/iu.test(left.text);
     const soft = /[,;:]["'”’)]*$/.test(left.text);
     const gap = right.startMs - left.endMs;
     const score = (strong ? 100 : soft ? 45 : gap >= 350 ? 25 : 0) - distance / 250;
@@ -34,5 +43,5 @@ export function localPlaybackSeam(tokens: readonly SourceToken[], original: numb
       bestScore = score;
     }
   }
-  return best;
+  return { cut: best, confident: bestScore >= 65 };
 }

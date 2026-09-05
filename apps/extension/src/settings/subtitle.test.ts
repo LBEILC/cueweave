@@ -23,6 +23,7 @@ describe('subtitle preferences', () => {
         backgroundOpacityPercent: 100,
       }),
     ).toEqual({
+      translationMode: 'balanced',
       displayMode: 'translation',
       bilingualOrder: 'source-first',
       transcriptCorrectionEnabled: true,
@@ -153,3 +154,27 @@ describe('subtitle preferences', () => {
     }
   });
 });
+
+it.each(['speed', 'balanced', 'quality'] as const)(
+  'persists %s translation mode',
+  async (translationMode) => {
+    const stored: Record<string, unknown> = {};
+    const storage = {
+      get: vi.fn(async () => stored),
+      set: vi.fn(async (values: Record<string, unknown>) => {
+        Object.assign(stored, values);
+      }),
+    };
+    vi.stubGlobal('browser', { storage: { local: storage } });
+    expect(parseSubtitlePreferences({ translationMode }).translationMode).toBe(translationMode);
+    expect(parseSubtitlePreferences({ translationMode: 'unknown' }).translationMode).toBe(
+      'balanced',
+    );
+    try {
+      await saveSubtitlePreferences({ ...DEFAULT_SUBTITLE_PREFERENCES, translationMode });
+      expect((await readSubtitlePreferences()).translationMode).toBe(translationMode);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  },
+);

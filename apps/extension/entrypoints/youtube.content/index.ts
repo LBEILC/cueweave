@@ -1,3 +1,4 @@
+import { translationPolicy } from '@cueweave/core/provider/translationPolicy';
 import {
   createSubtitleOverlay,
   applyOverlayPreferences,
@@ -555,6 +556,7 @@ async function runWindowTranslation(
       state.videoId ?? '',
       state.languageCode ?? '',
       (message) => browser.runtime.sendMessage(message),
+      subtitlePreferences.translationMode,
     );
     const plan = playbackPlan;
     const windowIndex = tokenWindows.findIndex((candidate) => candidate.id === window.id);
@@ -578,7 +580,7 @@ async function runWindowTranslation(
     for (const range of ranges) {
       const previousCues = translatedCues
         .filter((cue) => cue.endMs < range[0]!.startMs)
-        .slice(-6)
+        .slice(-translationPolicy(subtitlePreferences.translationMode).historyCues)
         .map((cue) => ({ sourceText: cue.sourceText, translation: cue.translation }));
       // A planning job can be promoted before its translation request has been enqueued.
       priority = windowStates.get(window.id)?.priority ?? priority;
@@ -591,6 +593,7 @@ async function runWindowTranslation(
           windowId: window.id,
           sessionId: requestTranslationSessionId,
           ...currentVideoContext(),
+          translationMode: subtitlePreferences.translationMode,
           correctionEnabled: subtitlePreferences.transcriptCorrectionEnabled,
         },
         priority,
@@ -934,7 +937,10 @@ async function loadTrack(detail: CaptionTracksEventDetail): Promise<void> {
     rawCues = cues;
     sourceTokens = buildSourceTokens(cues);
     displayCues = createLocalDisplayCues(sourceTokens);
-    tokenWindows = createTokenWindows(sourceTokens).map((window, index) => ({
+    tokenWindows = createTokenWindows(
+      sourceTokens,
+      translationPolicy(subtitlePreferences.translationMode).windows,
+    ).map((window, index) => ({
       ...window,
       id: `playback:${index}`,
     }));
@@ -1113,9 +1119,11 @@ export default defineContentScript({
         'preferences' in message
       ) {
         const nextPreferences = parseSubtitlePreferences(message.preferences);
+        const modeChanged = subtitlePreferences.translationMode !== nextPreferences.translationMode;
         const correctionSettingChanged =
+          modeChanged ||
           subtitlePreferences.transcriptCorrectionEnabled !==
-          nextPreferences.transcriptCorrectionEnabled;
+            nextPreferences.transcriptCorrectionEnabled;
         const switchingToSource =
           subtitlePreferences.displayMode !== 'source' && nextPreferences.displayMode === 'source';
         subtitlePreferences = nextPreferences;
@@ -1129,6 +1137,11 @@ export default defineContentScript({
         }
         if (correctionSettingChanged) {
           resetTranslatedResults();
+          if (modeChanged)
+            tokenWindows = createTokenWindows(
+              sourceTokens,
+              translationPolicy(subtitlePreferences.translationMode).windows,
+            ).map((window, index) => ({ ...window, id: `playback:${index}` }));
         }
         updateState({ displayMode: subtitlePreferences.displayMode });
         scheduleBufferPump();

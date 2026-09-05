@@ -53,19 +53,19 @@ async function main() {
   const expected = comparisonKey(runs[0]!.run);
   for (const { run } of runs) {
     if (
-      !['speed', 'balanced'].includes(run.identity.mode) ||
+      !['speed', 'balanced', 'quality'].includes(run.identity.mode) ||
       !['completed', 'completed-with-errors'].includes(run.status)
     )
-      throw new Error('只比较已完成的速度或均衡运行');
+      throw new Error('只比较已完成的速度、均衡或质量运行');
     if (comparisonKey(run) !== expected || hash(run.selected) !== hash(runs[0]!.run.selected))
       throw new Error('输入、模型、源码或其他运行条件不同，不可合并比较');
   }
-  if (new Set(runs.map(({ run }) => run.identity.mode)).size !== 2)
+  if (new Set(runs.map(({ run }) => run.identity.mode)).size < 2)
     throw new Error('需要两个策略的结果');
   const rows = [
     '# 翻译策略对照',
     '',
-    `模型：${runs[0]!.run.identity.model}。同输入、同源码；各策略轮流运行。`,
+    `模型：${runs[0]!.run.identity.model}。同输入、同源码；按下方列出的运行汇总。`,
     '',
     '表中为重复运行的中位数。首次可用表示离线串行流程首次返回字幕的时间；整段耗时包含规划和恢复。完整产出不代表语义正确，不能据此声称质量百分比或真实播放器等待时间。',
     '',
@@ -74,7 +74,9 @@ async function main() {
   ];
   const metrics = [];
   for (const selected of runs[0]!.run.selected) {
-    for (const mode of ['speed', 'balanced']) {
+    for (const mode of ['speed', 'balanced', 'quality'].filter((mode) =>
+      runs.some(({ run }) => run.identity.mode === mode),
+    )) {
       const results = runs
         .filter(({ run }) => run.identity.mode === mode)
         .map(({ run }) => run.results[selected.id]?.at(-1));

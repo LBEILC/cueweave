@@ -355,33 +355,50 @@ export function createSubtitleJsonRequest(
           ? 'translating'
           : 'repairing-output',
     );
-    for (let attempt = 0; ; attempt++) {
-      assertNotCancelled(signal);
-      try {
-        return await postProviderResponse(
-          settings,
-          [SYSTEM_MESSAGE, { role: 'user', content: prompt }],
-          {
-            type: 'json_schema',
-            json_schema: { name: 'cueweave_subtitles', strict: true, schema },
-          },
-          signal,
-          runtime,
-          { outputLimit: stage === 'rolling-seam' ? 4096 : 8192, requireComplete: true },
-        );
-      } catch (error) {
+    const revision = stage === 'quality-revision' || stage === 'risk-revision';
+    const deadline = new AbortController();
+    const timer = revision
+      ? setTimeout(() => deadline.abort(), translationPolicy(mode).revisionTimeoutMs)
+      : undefined;
+    const requestSignal = revision
+      ? signal
+        ? AbortSignal.any([signal, deadline.signal])
+        : deadline.signal
+      : signal;
+    try {
+      for (let attempt = 0; ; attempt++) {
         assertNotCancelled(signal);
-        if (
-          attempt >= translationPolicy(mode).transientRetries ||
-          !(error instanceof ProviderError) ||
-          !error.retryable ||
-          !['network', 'timeout', 'rate-limited'].includes(error.code)
-        )
-          throw error;
-        onProgress?.('retrying');
-        runtime.onDiagnostic?.({ kind: 'retry', message: error.code });
-        await retryDelay(signal);
+        try {
+          return await postProviderResponse(
+            settings,
+            [SYSTEM_MESSAGE, { role: 'user', content: prompt }],
+            {
+              type: 'json_schema',
+              json_schema: { name: 'cueweave_subtitles', strict: true, schema },
+            },
+            requestSignal,
+            runtime,
+            { outputLimit: stage === 'rolling-seam' ? 4096 : 8192, requireComplete: true },
+          );
+        } catch (error) {
+          assertNotCancelled(signal);
+          if (deadline.signal.aborted)
+            throw new ProviderError('timeout', '对照修订已达到等待预算，保留已有字幕。', false);
+          if (
+            revision ||
+            attempt >= translationPolicy(mode).transientRetries ||
+            !(error instanceof ProviderError) ||
+            !error.retryable ||
+            !['network', 'timeout', 'rate-limited'].includes(error.code)
+          )
+            throw error;
+          onProgress?.('retrying');
+          runtime.onDiagnostic?.({ kind: 'retry', message: error.code });
+          await retryDelay(signal);
+        }
       }
+    } finally {
+      if (timer !== undefined) clearTimeout(timer);
     }
   };
 }
@@ -404,6 +421,8 @@ export async function translatePlaybackWindow(
   assertNotCancelled(signal);
   for (const message of result.diagnostics)
     runtime.onDiagnostic?.({ kind: 'validation-error', message });
+  if (result.reviewStatus !== 'skipped')
+    runtime.onDiagnostic?.({ kind: 'stage', message: `revision-${result.reviewStatus}` });
   if (result.missingTokenIds.length) {
     throw new PartialTranslationError(result.cues, result.missingTokenIds);
   }

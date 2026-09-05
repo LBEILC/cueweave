@@ -81,14 +81,14 @@ let secret = '';
 async function main(): Promise<void> {
   if (values.help) {
     console.log(
-      'Production first-pass benchmark (no reference/judge input).\n--out .eval/benchmarks/<new-directory> --group smoke|development|holdout|diagnostic|all --token-file <file> [--mode speed|balanced] [--model id] [--base-url url] [--protocol auto|chat-completions|responses] [--max-requests 150] [--resume] [--dry-run]',
+      'Production first-pass benchmark (no reference/judge input).\n--out .eval/benchmarks/<new-directory> --group smoke|development|holdout|diagnostic|all --token-file <file> [--mode speed|balanced|quality] [--model id] [--base-url url] [--protocol auto|chat-completions|responses] [--max-requests 150] [--resume] [--dry-run]',
     );
     return;
   }
   const groups = ['smoke', 'development', 'holdout', 'diagnostic', 'all'];
   if (!groups.includes(values.group)) throw new Error('未知测试集分组');
-  if (!['speed', 'balanced'].includes(values.mode))
-    throw new Error('mode 必须为 speed 或 balanced');
+  if (!['speed', 'balanced', 'quality'].includes(values.mode))
+    throw new Error('mode 必须为 speed、balanced 或 quality');
   const mode = values.mode as TranslationMode;
   if (!values.out) throw new Error('缺少 --out');
   const directory = path.resolve(values.out);

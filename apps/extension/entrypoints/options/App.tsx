@@ -476,6 +476,43 @@ export function App() {
             >
               <div className="field-row display-field">
                 <span className="field-icon" aria-hidden="true">
+                  <TranslateIcon size={19} />
+                </span>
+                <span className="field-copy">
+                  <label className="field-label" htmlFor="translation-mode">
+                    翻译偏好
+                  </label>
+                  <span className="field-help">
+                    {subtitle.translationMode === 'speed'
+                      ? '优先尽快提供字幕'
+                      : subtitle.translationMode === 'quality'
+                        ? '逐句核对原文含义，等待可能更长'
+                        : '兼顾等待时间与理解'}
+                  </span>
+                </span>
+                <div className="select-field">
+                  <select
+                    id="translation-mode"
+                    value={subtitle.translationMode}
+                    onChange={(event) =>
+                      updateSubtitle(
+                        'translationMode',
+                        event.target.value as SubtitlePreferences['translationMode'],
+                      )
+                    }
+                  >
+                    <option value="speed">速度优先</option>
+                    <option value="balanced">均衡（默认）</option>
+                    <option value="quality">质量优先</option>
+                  </select>
+                  <span className="select-indicator" aria-hidden="true">
+                    <CaretDownIcon size={19} />
+                  </span>
+                </div>
+              </div>
+
+              <div className="field-row display-field">
+                <span className="field-icon" aria-hidden="true">
                   <MagicWandIcon size={19} />
                 </span>
                 <span className="field-copy">
@@ -726,7 +763,7 @@ export function App() {
                   disabled={displaySaveState === 'saving'}
                 >
                   <FloppyDiskIcon size={19} weight="bold" aria-hidden="true" />
-                  <span>{displaySaveState === 'saving' ? '正在应用' : '保存显示设置'}</span>
+                  <span>{displaySaveState === 'saving' ? '正在应用' : '保存字幕设置'}</span>
                 </button>
               </div>
 

@@ -6,6 +6,11 @@ import {
 } from '@cueweave/core/provider/playbackPlan';
 import type { ProviderSettings } from '@cueweave/core/provider/types';
 
+import {
+  TRANSLATION_POLICY_VERSION,
+  type TranslationMode,
+} from '@cueweave/core/provider/translationPolicy';
+
 const PREFIX = 'cueweave.playback-plan.';
 interface StoredPlan {
   videoId: string;
@@ -28,9 +33,12 @@ export class PlaybackPlans {
     languageCode: string,
     tokens: SourceToken[],
     settings: ProviderSettings,
+    mode: TranslationMode = 'balanced',
   ) {
     const identity = JSON.stringify({
       version: PLAYBACK_PLAN_VERSION,
+      policy: TRANSLATION_POLICY_VERSION,
+      mode,
       videoId,
       languageCode,
       baseUrl: settings.baseUrl,
@@ -48,7 +56,7 @@ export class PlaybackPlans {
       entry = this.entries.get(key);
       if (!entry) {
         const record = stored[key] as StoredPlan | undefined;
-        entry = { videoId, plan: new PlaybackPlan(tokens, record?.snapshot) };
+        entry = { videoId, plan: new PlaybackPlan(tokens, record?.snapshot, mode) };
         this.entries.set(key, entry);
       }
     }

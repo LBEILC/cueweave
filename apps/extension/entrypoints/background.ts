@@ -1,3 +1,4 @@
+import { TRANSLATION_POLICY_VERSION } from '@cueweave/core/provider/translationPolicy';
 import {
   isCancelTranslationSessionMessage,
   isClearTranslationCacheMessage,
@@ -323,7 +324,7 @@ async function translateWindowMessage(
       baseUrl: settings.baseUrl,
       model: settings.model,
       protocol: settings.protocol,
-      promptVersion: `${AI_PROMPT_VERSION}:${FIRST_PASS_VERSION}`,
+      promptVersion: `${AI_PROMPT_VERSION}:${FIRST_PASS_VERSION}:${TRANSLATION_POLICY_VERSION}:${message.context.translationMode ?? 'balanced'}`,
       segmentationVersion: `${DISPLAY_SEGMENTATION_VERSION}:${PLAYBACK_PLAN_VERSION}`,
       tokens: message.tokens,
       ...(message.neighbors ? { neighbors: message.neighbors } : {}),
@@ -389,6 +390,7 @@ async function translateWindowMessage(
             ...(message.context.transcriptEvidence
               ? { transcriptEvidence: message.context.transcriptEvidence }
               : {}),
+            translationMode: message.context.translationMode ?? 'balanced',
             correctionEnabled: message.context.correctionEnabled,
             terminology,
             entityAliases,
@@ -532,7 +534,13 @@ export default defineBackground(() => {
     if (isOpenPlaybackPlanMessage(message)) {
       return readProviderSettings()
         .then((settings) =>
-          playbackPlans.open(message.videoId, message.languageCode, message.tokens, settings),
+          playbackPlans.open(
+            message.videoId,
+            message.languageCode,
+            message.tokens,
+            settings,
+            message.translationMode,
+          ),
         )
         .then((plan) => ({ ok: true, ...plan }))
         .catch(() => ({
@@ -588,7 +596,13 @@ export default defineBackground(() => {
             progress('planning');
             await plan.prepare(
               message.index,
-              createSubtitleJsonRequest(settings, controller.signal, progress, debug.runtime),
+              createSubtitleJsonRequest(
+                settings,
+                controller.signal,
+                progress,
+                debug.runtime,
+                plan.mode,
+              ),
               controller.signal,
               async (snapshot) => {
                 await savePlan(snapshot).catch(() => undefined);

@@ -1,7 +1,10 @@
+import type { TranslationMode } from '../provider/translationPolicy';
+
 export type SubtitleDisplayMode = 'bilingual' | 'translation' | 'source';
 export type BilingualOrder = 'translation-first' | 'source-first';
 
 export interface SubtitlePreferences {
+  translationMode: TranslationMode;
   displayMode: SubtitleDisplayMode;
   bilingualOrder: BilingualOrder;
   transcriptCorrectionEnabled: boolean;
@@ -15,6 +18,7 @@ export interface SubtitlePreferences {
 }
 
 export const DEFAULT_SUBTITLE_PREFERENCES: Readonly<SubtitlePreferences> = {
+  translationMode: 'balanced',
   displayMode: 'bilingual',
   bilingualOrder: 'translation-first',
   transcriptCorrectionEnabled: true,
@@ -38,6 +42,10 @@ export function parseSubtitlePreferences(value: unknown): SubtitlePreferences {
     typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {};
 
   return {
+    translationMode:
+      record.translationMode === 'speed' || record.translationMode === 'quality'
+        ? record.translationMode
+        : 'balanced',
     displayMode:
       record.displayMode === 'translation' || record.displayMode === 'source'
         ? record.displayMode

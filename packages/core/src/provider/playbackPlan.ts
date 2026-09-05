@@ -2,9 +2,9 @@ import { createTokenWindows, type SourceToken, type TokenWindow } from '../domai
 import type { SubtitleJsonRequest } from './firstPass';
 import { ProviderError } from './types';
 import { translationPolicy, type TranslationMode } from './translationPolicy';
-import { localPlaybackSeam } from './localSeam';
+import { localPlaybackSeamDecision } from './localSeam';
 
-export const PLAYBACK_PLAN_VERSION = 'rolling-playback-v1';
+export const PLAYBACK_PLAN_VERSION = 'rolling-playback-v2';
 export interface PlanSnapshot {
   /** Exclusive end indices. A finalized seam never moves again. */
   ends: number[];
@@ -170,10 +170,10 @@ export class PlaybackPlan {
   constructor(
     readonly tokens: readonly SourceToken[],
     saved?: unknown,
-    private readonly mode: TranslationMode = 'balanced',
+    readonly mode: TranslationMode = 'balanced',
   ) {
     let end = 0;
-    const windows = createTokenWindows(tokens);
+    const windows = createTokenWindows(tokens, translationPolicy(mode).windows);
     this.state = validPlanSnapshot(saved, tokens, windows.length)
       ? structuredClone(saved)
       : {
@@ -208,25 +208,22 @@ export class PlaybackPlan {
           const start = this.state.ends[seam - 1] ?? 0;
           const end = this.state.ends[seam + 1]!;
           const pair = this.tokens.slice(start, end);
-          if (!translationPolicy(this.mode).modelSeams)
-            this.state.ends[seam] = start + localPlaybackSeam(pair, this.state.ends[seam]! - start);
+          const local = localPlaybackSeamDecision(pair, this.state.ends[seam]! - start);
+          let nextCut = local.cut;
           // Very short video tails cannot meet the experiment's two-window minimum.
           if (
             translationPolicy(this.mode).modelSeams &&
+            !local.confident &&
             pair.at(-1)!.endMs - pair[0]!.startMs >= 24_000
           ) {
             try {
               const content = await request(
                 'rolling-seam',
-                playbackSeamPrompt(
-                  pair,
-                  this.state.ends[seam]! - start,
-                  sourceNeighbors(this.tokens, pair),
-                ),
+                playbackSeamPrompt(pair, nextCut, sourceNeighbors(this.tokens, pair)),
                 PLAYBACK_SEAM_SCHEMA,
               );
               if (signal?.aborted) throw new ProviderError('cancelled', '窗口规划已取消。');
-              this.state.ends[seam] = start + parsePlaybackSeam(content, pair);
+              nextCut = parsePlaybackSeam(content, pair);
             } catch (error) {
               if (
                 signal?.aborted ||
@@ -243,6 +240,7 @@ export class PlaybackPlan {
               diagnostic('语义窗口规划未完成，保留当前边界并携带相邻原文翻译。');
             }
           }
+          this.state.ends[seam] = start + nextCut;
           this.state.finalized[seam] = true;
           this.state.revision++;
           await save(this.snapshot());

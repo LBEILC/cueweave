@@ -222,4 +222,4 @@ node --import tsx scripts/experiment-first-pass.ts --out .eval/runs/first-pass-t
 
 ## 速度与质量策略对照
 
-目标、实验档位、局部交付行为和运行方法见 [TRANSLATION-STRATEGY.md](TRANSLATION-STRATEGY.md)。`run-translation-benchmark.ts` 支持 `--mode speed|balanced`，默认 balanced；`compare-translation-strategies.ts` 对相同输入与源码的多轮结果比较首次可用、整段耗时、请求数和缺失量。完整覆盖不等于语义正确。
+目标、三档策略、局部交付行为和运行方法见 [TRANSLATION-STRATEGY.md](TRANSLATION-STRATEGY.md)。`run-translation-benchmark.ts` 支持 `--mode speed|balanced|quality`，默认 balanced；`compare-translation-strategies.ts` 对相同输入与源码的多轮结果比较首次可用、整段耗时、请求数和缺失量。完整覆盖不等于语义正确。
