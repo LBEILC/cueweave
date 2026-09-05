@@ -13,6 +13,7 @@
     "start": "electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "test:smoke": "npm run build && node scripts/smoke.mjs",
+    "test:project": "npm run build && node scripts/project-storage-check.mjs && node scripts/project-acceptance.mjs",
     "rebuild:native": "electron-builder install-app-deps",
     "pack:dir": "npm run build && electron-builder --win --x64 --dir",
     "dist:win": "npm run build && electron-builder --win --x64",

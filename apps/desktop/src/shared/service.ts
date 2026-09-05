@@ -1,6 +1,7 @@
 import type { DesktopErrorCode, LinkImportProgress, LinkPreview, MediaProbe } from './bridge';
 
 export type ServiceMethod =
+  | 'project'
   | 'health'
   | 'storageCheck'
   | 'probeMedia'

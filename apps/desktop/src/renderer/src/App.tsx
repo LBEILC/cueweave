@@ -1,3 +1,4 @@
+import { SelectControl } from './components/SelectControl';
 import {
   ArrowsOutIcon,
   InfoIcon,
@@ -9,13 +10,16 @@ import {
   SubtitlesIcon,
   UploadSimpleIcon,
 } from '@phosphor-icons/react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { AboutContent } from './components/AboutContent';
 import { MediaImport } from './components/MediaImport';
 import { formatBytes, formatDuration, loginSiteFromLink, parseSubtitle } from './media-display';
 export { loginSiteFromLink, parseSubtitle } from './media-display';
 import { WorkspaceDialog } from './components/WorkspaceDialog';
 import { SubtitlePanel, type SubtitleCue } from './components/SubtitlePanel';
+import { ProjectHeader, ProjectTools } from './components/ProjectTools';
+import { CueEditor } from './components/CueEditor';
+import { useProject } from './use-project';
 import type {
   AppInfo,
   LinkImportProgress,
@@ -74,6 +78,35 @@ export function App() {
   const audioRef = useRef<HTMLAudioElement>(null);
   const linkJobRef = useRef('');
   const qualityResumeRef = useRef<{ positionSeconds: number; paused: boolean } | null>(null);
+  const [editingCueId, setEditingCueId] = useState('');
+  const mediaLoadGeneration = useRef(0);
+  const projects = useProject(({ project, asset: openedAsset, probe: openedProbe }) => {
+    mediaLoadGeneration.current++;
+    setError('');
+    qualityResumeRef.current = { positionSeconds: project.positionMs / 1000, paused: true };
+    setAsset(openedAsset);
+    setProbe(openedProbe);
+    setOnlinePlayback(null);
+    setMediaOrigin('local');
+    setImportOpen(false);
+    setPanelOpen(true);
+    setEditingCueId('');
+    setPlayer((current) => ({ ...current, subtitleDelaySeconds: 0 }));
+  });
+  const project = projects.project;
+  const displayedCues = useMemo(
+    () =>
+      project
+        ? project.cues.map((cue) => ({
+            start: cue.startMs / 1000,
+            end: cue.endMs / 1000,
+            text: cue.text,
+          }))
+        : subtitleCues,
+    [project?.cues, subtitleCues],
+  );
+  const editingCue = project?.cues.find((cue) => cue.id === editingCueId);
+  const lastCheckpointRef = useRef(0);
   const playback = onlinePlayback?.playback;
   const selectedVariant =
     playback?.variants.find((variant) => variant.id === selectedVariantId) ?? playback?.variants[0];
@@ -125,6 +158,7 @@ export function App() {
           if (event.jobId !== linkJobRef.current) return;
           setImportOpen(false);
           setAsset(event.asset);
+          projects.detach();
           setOnlinePlayback(null);
           setProbe(event.probe);
           setMediaOrigin('network');
@@ -194,6 +228,7 @@ export function App() {
     const onKeyDown = (event: KeyboardEvent) => {
       if ((!asset && !onlinePlayback) || document.querySelector('dialog[open]')) return;
       if (event.key === 'Escape' && panelOpen && !document.fullscreenElement) {
+        if (projects.dirty) return;
         setPanelOpen(false);
         subtitleButtonRef.current?.focus();
         return;
@@ -220,16 +255,19 @@ export function App() {
     player.durationSeconds,
     fullscreen,
     panelOpen,
+    projects.dirty,
   ]);
 
   async function inspect(nextAsset: MediaAsset) {
+    const generation = ++mediaLoadGeneration.current;
     const result = await window.cueweave.probeMedia(nextAsset.id);
+    if (generation !== mediaLoadGeneration.current) return;
     if (result.ok) setProbe(result.value);
     else setError('视频已打开，但暂时无法读取媒体信息。');
   }
 
   async function acceptFile(file: File | undefined) {
-    if (!file) return;
+    if (!file || projects.busy || projects.dirty) return;
     setLoading(true);
     setError('');
     setProbe(null);
@@ -241,6 +279,7 @@ export function App() {
       }
       setImportOpen(false);
       setAsset(result.value);
+      projects.detach();
       setOnlinePlayback(null);
       setMediaOrigin('local');
       await inspect(result.value);
@@ -264,6 +303,7 @@ export function App() {
       setProbe(null);
       setImportOpen(false);
       setAsset(result.value);
+      projects.detach();
       setOnlinePlayback(null);
       setMediaOrigin('local');
       await inspect(result.value);
@@ -350,6 +390,7 @@ export function App() {
       return;
     }
     setAsset(null);
+    projects.detach();
     setProbe(null);
     setSelectedVariantId(linkPreview.playback.defaultVariantId);
     setSelectedOnlineSubtitleId('');
@@ -396,8 +437,12 @@ export function App() {
   }
 
   async function toggleFullscreen() {
-    if (document.fullscreenElement) await document.exitFullscreen();
-    else await workspaceRef.current?.requestFullscreen();
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen();
+      else await workspaceRef.current?.requestFullscreen();
+    } catch {
+      setError('无法切换全屏，请重试。');
+    }
   }
 
   function commitSeek(positionSeconds: number) {
@@ -535,18 +580,24 @@ export function App() {
   const duration =
     player.durationSeconds ?? onlinePlayback?.durationSeconds ?? probe?.durationSeconds ?? 0;
   const displayedPosition = Math.min(seekValue ?? player.positionSeconds, duration || Infinity);
-  const playerUnavailable = player.phase === 'loading' || player.phase === 'error';
+  const playerUnavailable = !videoUrl || player.phase === 'loading' || player.phase === 'error';
   const subtitleTimePosition = player.positionSeconds - player.subtitleDelaySeconds;
-  const visibleSubtitle = subtitleCues.find(
-    (cue) => subtitleTimePosition >= cue.start && subtitleTimePosition <= cue.end,
-  )?.text;
+  const visibleSubtitle = displayedCues
+    .filter((cue) => subtitleTimePosition >= cue.start && subtitleTimePosition < cue.end)
+    .map((cue) => cue.text)
+    .join('\n');
 
   const subtitleTools = (
     <>
+      <p className="project-warning">
+        {asset
+          ? '创建项目后，可以编辑、保存和导出字幕。'
+          : '下载视频并创建项目后，可以编辑、保存和导出字幕。'}
+      </p>
       {playback && playback.subtitles.length > 0 && (
         <label>
           在线字幕
-          <select
+          <SelectControl
             aria-label="在线字幕"
             value={selectedOnlineSubtitleId}
             disabled={onlineSubtitleLoading}
@@ -558,7 +609,7 @@ export function App() {
                 {subtitle.label}
               </option>
             ))}
-          </select>
+          </SelectControl>
         </label>
       )}
       <button type="button" className="quiet-button" onClick={() => void pickSubtitle()}>
@@ -568,7 +619,7 @@ export function App() {
       {player.subtitleName && (
         <label>
           字幕偏移
-          <select
+          <SelectControl
             value={player.subtitleDelaySeconds}
             onChange={(event) => setSubtitleDelay(Number(event.target.value))}
           >
@@ -577,7 +628,7 @@ export function App() {
             <option value="0">无偏移</option>
             <option value="0.5">延后 0.5 秒</option>
             <option value="1">延后 1 秒</option>
-          </select>
+          </SelectControl>
         </label>
       )}
     </>
@@ -646,8 +697,22 @@ export function App() {
           <span>CueWeave</span>
         </div>
         <div className="header-actions">
+          <ProjectHeader
+            canCreate={Boolean(asset) && !linkJobId}
+            hasProject={Boolean(project)}
+            busy={loading || projects.busy || projects.dirty || Boolean(linkJobId)}
+            run={(action) => {
+              if (action === 'create' && asset) void projects.run({ action, mediaId: asset.id });
+              else if (action === 'open') void projects.run({ action });
+            }}
+          />
           {(asset || onlinePlayback) && (
-            <button type="button" className="quiet-button" onClick={() => setImportOpen(true)}>
+            <button
+              type="button"
+              className="quiet-button"
+              disabled={projects.busy || projects.dirty}
+              onClick={() => setImportOpen(true)}
+            >
               <UploadSimpleIcon size={18} aria-hidden="true" />
               打开其他视频
             </button>
@@ -665,7 +730,7 @@ export function App() {
         </div>
       </header>
       <main id="main-content" className="workspace">
-        {asset || onlinePlayback ? (
+        {asset || onlinePlayback || project ? (
           <section
             ref={workspaceRef}
             className={`player-workspace${fullscreen ? ' is-fullscreen' : ''}`}
@@ -680,8 +745,8 @@ export function App() {
                       ? '链接视频'
                       : '本地视频'}
                 </p>
-                <h1 id="media-title" title={onlinePlayback?.title ?? asset?.name}>
-                  {onlinePlayback?.title ?? asset?.name}
+                <h1 id="media-title" title={project?.name ?? onlinePlayback?.title ?? asset?.name}>
+                  {project?.name ?? onlinePlayback?.title ?? asset?.name}
                 </h1>
                 <p className="media-meta">
                   {onlinePlayback ? (
@@ -708,6 +773,7 @@ export function App() {
                 ref={subtitleButtonRef}
                 aria-expanded={panelOpen}
                 aria-controls="subtitle-panel"
+                disabled={projects.dirty}
                 onClick={() => setPanelOpen(!panelOpen)}
               >
                 <SubtitlesIcon size={18} aria-hidden="true" />
@@ -726,9 +792,28 @@ export function App() {
             <div className={`workspace-body${panelOpen ? ' has-panel' : ''}`}>
               <div className="playback-column">
                 <div ref={stageRef} className="video-stage" aria-label="视频画面">
+                  {project?.mediaMissing && (
+                    <div className="missing-media">
+                      <p>原视频已移动或内容发生变化。</p>
+                      <button
+                        className="primary-button"
+                        disabled={projects.busy || projects.dirty}
+                        onClick={() =>
+                          void projects.run({
+                            action: 'relink',
+                            projectId: project.id,
+                            baseRevision: project.revision,
+                          })
+                        }
+                      >
+                        重新定位原视频
+                      </button>
+                      <p>字幕仍可编辑和导出。</p>
+                    </div>
+                  )}
                   <video
                     ref={videoRef}
-                    src={videoUrl}
+                    src={videoUrl || undefined}
                     autoPlay
                     playsInline
                     preload="auto"
@@ -761,6 +846,10 @@ export function App() {
                     }}
                     onTimeUpdate={(event) => {
                       const positionSeconds = event.currentTarget.currentTime;
+                      if (Date.now() - lastCheckpointRef.current > 5000) {
+                        lastCheckpointRef.current = Date.now();
+                        void projects.checkpoint(positionSeconds);
+                      }
                       setPlayer((current) => ({ ...current, positionSeconds }));
                       syncAudio();
                     }}
@@ -773,6 +862,7 @@ export function App() {
                       syncAudio(true);
                     }}
                     onPause={() => {
+                      if (videoRef.current) void projects.checkpoint(videoRef.current.currentTime);
                       audioRef.current?.pause();
                       setPlayer((current) => ({
                         ...current,
@@ -831,8 +921,47 @@ export function App() {
               </div>
               {panelOpen && (
                 <SubtitlePanel
-                  cues={subtitleCues}
-                  name={player.subtitleName}
+                  cues={displayedCues}
+                  name={project?.trackName || player.subtitleName}
+                  locked={projects.dirty || projects.busy}
+                  onEdit={
+                    project
+                      ? (index) => {
+                          setEditingCueId(project.cues[index]?.id ?? '');
+                          videoRef.current?.pause();
+                        }
+                      : undefined
+                  }
+                  tools={
+                    project && (
+                      <ProjectTools
+                        project={project}
+                        busy={projects.busy || projects.dirty}
+                        run={projects.run}
+                      />
+                    )
+                  }
+                  editor={
+                    editingCue &&
+                    project && (
+                      <CueEditor
+                        key={`${project.id}:${editingCue.id}:${project.revision}`}
+                        cue={editingCue}
+                        durationMs={project.durationMs}
+                        busy={projects.busy}
+                        onDirty={projects.setDirty}
+                        onClose={() => setEditingCueId('')}
+                        onSave={(cue) =>
+                          projects.run({
+                            action: 'edit',
+                            projectId: project.id,
+                            baseRevision: project.revision,
+                            cue,
+                          })
+                        }
+                      />
+                    )
+                  }
                   position={subtitleTimePosition}
                   onSeek={(seconds) => seekTo(seconds + player.subtitleDelaySeconds)}
                   onClose={() => {
@@ -840,7 +969,11 @@ export function App() {
                     subtitleButtonRef.current?.focus();
                   }}
                 >
-                  {subtitleTools}
+                  {project ? (
+                    <p>原始字幕保留在项目中。点击铅笔修改文本和时间，保存后自动写入项目。</p>
+                  ) : (
+                    subtitleTools
+                  )}
                 </SubtitlePanel>
               )}
             </div>
@@ -910,7 +1043,7 @@ export function App() {
                   {playback && playback.variants.length > 1 && (
                     <label>
                       清晰度
-                      <select
+                      <SelectControl
                         aria-label="清晰度"
                         value={selectedVariant?.id ?? ''}
                         onChange={(event) => changeQuality(event.target.value)}
@@ -920,19 +1053,22 @@ export function App() {
                             {variant.label}
                           </option>
                         ))}
-                      </select>
+                      </SelectControl>
                     </label>
                   )}
                   <label>
                     播放速度
-                    <select value={rate} onChange={(event) => changeRate(event.target.value)}>
+                    <SelectControl
+                      value={rate}
+                      onChange={(event) => changeRate(event.target.value)}
+                    >
                       <option value="0.5">0.5×</option>
                       <option value="0.75">0.75×</option>
                       <option value="1">1×</option>
                       <option value="1.25">1.25×</option>
                       <option value="1.5">1.5×</option>
                       <option value="2">2×</option>
-                    </select>
+                    </SelectControl>
                   </label>
                 </div>
                 <button type="button" className="quiet-button" onClick={toggleFullscreen}>
@@ -946,15 +1082,29 @@ export function App() {
                 {error}
               </p>
             )}
+            {projects.error && (
+              <p className="inline-error" role="alert">
+                {projects.error}
+              </p>
+            )}
           </section>
         ) : (
-          <div className="welcome-scroll">{importContent}</div>
+          <div className="welcome-scroll">
+            <div className="welcome-content">
+              {projects.error && (
+                <p className="inline-error" role="alert">
+                  {projects.error}
+                </p>
+              )}
+              {importContent}
+            </div>
+          </div>
         )}
       </main>
       <footer className="workspace-status">
         <span>
-          {asset || onlinePlayback
-            ? `${onlinePlayback?.source ?? '本地视频'}${subtitleCues.length ? ` · ${subtitleCues.length} 条字幕` : ''}`
+          {asset || onlinePlayback || project
+            ? `${project?.name ?? onlinePlayback?.source ?? '本地视频'}${displayedCues.length ? ` · ${displayedCues.length} 条字幕` : ''}`
             : '本地文件 · YouTube · 哔哩哔哩'}
         </span>
         {linkProgress ? (
@@ -966,11 +1116,17 @@ export function App() {
           </button>
         ) : (
           <span>
-            {player.phase === 'playing'
-              ? '正在播放'
-              : asset || onlinePlayback
-                ? '就绪'
-                : '字幕工作台'}
+            {projects.busy
+              ? '正在处理项目…'
+              : projects.dirty
+                ? '有未保存的字幕修改'
+                : project
+                  ? projects.message || '已保存'
+                  : player.phase === 'playing'
+                    ? '正在播放'
+                    : asset || onlinePlayback
+                      ? '就绪'
+                      : '字幕工作台'}
           </span>
         )}
       </footer>

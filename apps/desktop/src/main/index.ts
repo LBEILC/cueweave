@@ -1,8 +1,19 @@
-import { app, BrowserWindow, dialog, Menu, nativeTheme, net, protocol, session } from 'electron';
-import { mkdir, rm, stat, writeFile } from 'node:fs/promises';
+import {
+  app,
+  BrowserWindow,
+  dialog,
+  Menu,
+  nativeTheme,
+  net,
+  protocol,
+  screen,
+  session,
+} from 'electron';
+import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { registerAppIpc } from './ipc';
+import { registerProjectIpc } from './project-ipc';
 import { contentSecurityPolicy, getRendererUrl, resolveAppAsset } from './security';
 import { MediaRegistry } from './media';
 import { DesktopServiceHost } from './service-host';
@@ -21,13 +32,14 @@ let service: DesktopServiceHost | null = null;
 let shuttingDown = false;
 
 app.setName('CueWeave');
+if (process.platform === 'win32') app.setAppUserModelId('dev.cueweave.desktop');
 if (hidden || d0Check || linkCheck) {
   app.disableHardwareAcceleration();
   // Automated media checks still decode audio, but must never use the user's speakers.
   app.commandLine.appendSwitch('mute-audio');
   app.on('web-contents-created', (_event, contents) => contents.setAudioMuted(true));
 }
-if (process.env.CUEWEAVE_TEST_USER_DATA && (!app.isPackaged || d0Check || linkCheck)) {
+if (process.env.CUEWEAVE_TEST_USER_DATA && (!app.isPackaged || hidden || d0Check || linkCheck)) {
   app.setPath('userData', process.env.CUEWEAVE_TEST_USER_DATA);
 }
 protocol.registerSchemesAsPrivileged([
@@ -158,10 +170,28 @@ app
     }
 
     Menu.setApplicationMenu(null);
+    const windowStatePath = join(app.getPath('userData'), 'window-state.json');
+    const workArea = screen.getPrimaryDisplay().workAreaSize;
+    let savedSize = { width: 1280, height: 820 };
+    try {
+      const saved = JSON.parse(await readFile(windowStatePath, 'utf8')) as typeof savedSize;
+      if (
+        Number.isSafeInteger(saved.width) &&
+        Number.isSafeInteger(saved.height) &&
+        saved.width >= 640 &&
+        saved.height >= 480
+      )
+        savedSize = saved;
+    } catch {
+      /* First launch uses the workspace default. */
+    }
     const window = new BrowserWindow({
       title: '句织 · CueWeave',
-      width: 1120,
-      height: 760,
+      icon: app.isPackaged
+        ? join(process.resourcesPath, 'icon.ico')
+        : join(mainDirectory, '../../resources/build/icon.ico'),
+      width: Math.max(640, Math.min(savedSize.width, workArea.width - 32)),
+      height: Math.max(480, Math.min(savedSize.height, workArea.height - 32)),
       minWidth: 640,
       minHeight: 480,
       show: false,
@@ -175,6 +205,22 @@ app
         webviewTag: false,
       },
     });
+    const allowFullscreen = (
+      contents: Electron.WebContents | null,
+      permission: string,
+      details: { isMainFrame: boolean; requestingUrl?: string },
+    ) =>
+      !window.isDestroyed() &&
+      contents === window.webContents &&
+      permission === 'fullscreen' &&
+      details.isMainFrame &&
+      details.requestingUrl === rendererUrl;
+    session.defaultSession.setPermissionCheckHandler((contents, permission, _origin, details) =>
+      allowFullscreen(contents, permission, details),
+    );
+    session.defaultSession.setPermissionRequestHandler((contents, permission, callback, details) =>
+      callback(allowFullscreen(contents, permission, details)),
+    );
     window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
     window.webContents.on('render-process-gone', (_event, details) => {
       if (!app.isPackaged) console.error('[CueWeave] Renderer exited:', details);
@@ -183,6 +229,7 @@ app
     window.webContents.on('will-frame-navigate', (details) => details.preventDefault());
     window.webContents.on('will-attach-webview', (event) => event.preventDefault());
     const auth = new SiteAuthManager(hidden);
+    const disposeProjectIpc = registerProjectIpc({ window, rendererUrl, media, service });
     const disposeIpc = registerAppIpc({
       window,
       rendererUrl,
@@ -199,17 +246,27 @@ app
     });
     let closingWindow = false;
     window.on('close', (event) => {
-      if (closingWindow || !service) return;
+      if (!service) return;
       event.preventDefault();
+      if (closingWindow) return;
       closingWindow = true;
-      const closingService = service;
-      service = null;
-      void closingService?.stop().finally(() => {
+      void (async () => {
+        if (!(await disposeProjectIpc.beforeClose().catch(() => true))) {
+          closingWindow = false;
+          return;
+        }
+        const { width, height } = window.getNormalBounds();
+        if (!hidden)
+          await writeFile(windowStatePath, JSON.stringify({ width, height })).catch(() => {});
+        const closingService = service;
+        service = null;
+        await closingService?.stop();
         if (!window.isDestroyed()) window.destroy();
         app.quit();
-      });
+      })();
     });
     window.on('closed', () => {
+      disposeProjectIpc.dispose();
       auth.dispose();
       disposeIpc();
     });
@@ -228,6 +285,11 @@ app.on('window-all-closed', () => app.quit());
 app.on('before-quit', (event) => {
   if (shuttingDown || !service) return;
   event.preventDefault();
+  const window = BrowserWindow.getAllWindows()[0];
+  if (window) {
+    window.close();
+    return;
+  }
   shuttingDown = true;
   void service?.stop().finally(() => {
     service = null;

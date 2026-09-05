@@ -7,6 +7,8 @@ import type { ServiceRequest, ServiceResponse } from '../shared/service';
 import type { MediaProbe, MediaTrack } from '../shared/bridge';
 import type { SubtitleRequest } from '../shared/service';
 import { downloadLink, fetchWebsiteSubtitle, inspectLink, LinkError } from './link';
+import { ProjectStore, projectErrorMessage, type ProjectServiceRequest } from './projects';
+const projects = new ProjectStore();
 
 const parentPort = process.parentPort;
 if (!parentPort) throw new Error('CueWeave service requires an Electron parent port');
@@ -198,6 +200,8 @@ async function storageCheck(): Promise<{ token: string; reopened: boolean }> {
 
 async function handle(request: ServiceRequest): Promise<unknown> {
   switch (request.method) {
+    case 'project':
+      return projects.run(request.payload as ProjectServiceRequest);
     case 'health':
       return { generation, pid: process.pid };
     case 'storageCheck':
@@ -391,8 +395,17 @@ parentPort.on('message', (event) => {
         id: request.id,
         generation,
         ok: false,
-        error: error instanceof Error ? error.message.slice(0, 500) : 'Service operation failed',
-        ...(error instanceof LinkError ? { errorCode: error.code } : {}),
+        error:
+          request.method === 'project'
+            ? projectErrorMessage(error)
+            : error instanceof Error
+              ? error.message.slice(0, 500)
+              : 'Service operation failed',
+        ...(request.method === 'project'
+          ? { errorCode: 'PROJECT_ERROR' as const }
+          : error instanceof LinkError
+            ? { errorCode: error.code }
+            : {}),
       };
       parentPort.postMessage(response);
     });

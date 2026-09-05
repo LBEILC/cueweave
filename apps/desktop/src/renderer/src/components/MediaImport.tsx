@@ -1,3 +1,4 @@
+import { SelectControl } from './SelectControl';
 import {
   FilmSlateIcon,
   SpinnerGapIcon,
@@ -136,7 +137,7 @@ export function MediaImport({
         </div>
         <div className="login-source">
           <label htmlFor="login-source">网站账号</label>
-          <select
+          <SelectControl
             id="login-source"
             value={authMode}
             disabled={inspectingLink || Boolean(linkJobId)}
@@ -148,7 +149,7 @@ export function MediaImport({
           >
             <option value="none">不使用登录</option>
             <option value="app">使用句织登录</option>
-          </select>
+          </SelectControl>
           {authMode === 'none' ? (
             <span>公开内容会直接读取。</span>
           ) : currentLoginSite ? (

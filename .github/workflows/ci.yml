@@ -62,6 +62,11 @@ jobs:
       - name: Build Windows installer
         run: npm run dist:desktop
 
+      - name: Verify packaged subtitle projects
+        run: npm run test:desktop:project
+        env:
+          CUEWEAVE_PROJECT_EXECUTABLE: ${{ github.workspace }}/apps/desktop/dist/package/win-unpacked/CueWeave.exe
+
       - name: Verify unpacked application
         run: npm run test:desktop:d0
 

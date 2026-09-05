@@ -16,6 +16,8 @@ asarUnpack:
   - node_modules/better-sqlite3/**/*
 
 extraResources:
+  - from: resources/build/icon.ico
+    to: icon.ico
   - from: ../../node_modules/ffmpeg-static/ffmpeg.exe
     to: tools/ffmpeg.exe
   - from: ../../node_modules/@derhuerst/ffprobe-static/ffprobe.exe

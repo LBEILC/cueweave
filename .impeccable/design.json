@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-09-05T04:26:16.652Z",
+  "generatedAt": "2026-09-05T05:24:48.097Z",
   "title": "Design System: CueWeave Warm Paper",
   "extensions": {
     "colorMeta": {
@@ -525,6 +525,21 @@
           "oklch(83.57% 0 0)",
           "oklch(95% 0 0)"
         ]
+      },
+      "desktop-primary-fill": {
+        "role": "primary",
+        "displayName": "桌面白字按钮实底",
+        "canonical": "#b6450f",
+        "tonalRamp": [
+          "oklch(15.00% 0.15797 41.11)",
+          "oklch(26.43% 0.15797 41.11)",
+          "oklch(37.86% 0.15797 41.11)",
+          "oklch(49.29% 0.15797 41.11)",
+          "oklch(60.71% 0.15797 41.11)",
+          "oklch(72.14% 0.15797 41.11)",
+          "oklch(83.57% 0.15797 41.11)",
+          "oklch(95.00% 0.15797 41.11)"
+        ]
       }
     },
     "typographyMeta": {
@@ -629,6 +644,10 @@
       {
         "name": "desktop-compact",
         "value": "680px"
+      },
+      {
+        "name": "desktop-focused-editor-height",
+        "value": "650px"
       }
     ]
   },
@@ -721,9 +740,9 @@
       "name": "桌面导入主按钮",
       "kind": "button",
       "refersTo": "desktop-button-primary",
-      "description": "桌面最小高度 42px 的导入操作；白字保留于两种主题，禁用时不透明度 0.6。无单独主按钮悬停或按下颜色覆盖。",
+      "description": "桌面导入操作最小高度 42px；两种主题均使用独立 primary-fill 暗橙实底与白字（约 5.46:1）。禁用不透明度 0.6，无单独悬停或按下颜色覆盖。",
       "html": "<button class=\"ds-desktop-primary\" type=\"button\">打开视频</button>",
-      "css": ".ds-desktop-primary { font-family: 'MiSans', 'Mi Sans', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif; font-synthesis: none; display: inline-flex; align-items: center; gap: 8px; min-height: 42px; padding: 9px 16px; border: 1px solid var(--accent, #b6450f); border-radius: 8px; background: var(--accent, #b6450f); color: #fff; font-size: 0.875rem; font-weight: 600; line-height: 1.6; cursor: pointer; } .ds-desktop-primary:focus-visible { outline: 2px solid var(--accent, #b6450f); outline-offset: 4px; } .ds-desktop-primary:disabled { opacity: 0.6; cursor: not-allowed; }"
+      "css": ".ds-desktop-primary { font-family: 'MiSans', 'Mi Sans', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif; font-synthesis: none; display: inline-flex; align-items: center; gap: 8px; min-height: 42px; padding: 9px 16px; border: 1px solid var(--primary-fill, #b6450f); border-radius: 8px; background: var(--primary-fill, #b6450f); color: #fff; font-size: 0.875rem; font-weight: 600; line-height: 1.6; cursor: pointer; } .ds-desktop-primary:focus-visible { outline: 2px solid var(--accent, #b6450f); outline-offset: 4px; } .ds-desktop-primary:disabled { opacity: 0.6; cursor: not-allowed; }"
     },
     {
       "name": "桌面当前字幕行",
@@ -732,6 +751,29 @@
       "description": "当前句的文字、时间、背景与 aria-current 同时表达状态。行高随内容变化，点击由播放器定位逻辑处理。",
       "html": "<button class=\"ds-desktop-cue\" type=\"button\" aria-current=\"true\"><span class=\"ds-desktop-time\">00:12 <span>当前</span></span><span class=\"ds-desktop-cue-text\">字幕内容</span></button>",
       "css": ".ds-desktop-cue { font-family: 'MiSans', 'Mi Sans', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif; font-synthesis: none; display: block; width: 100%; border: 0; border-bottom: 1px solid var(--line, #dedbd5); background: transparent; color: var(--ink, #383838); text-align: left; padding: 14px 16px; cursor: pointer; } .ds-desktop-cue:hover, .ds-desktop-cue[aria-current] { background: var(--surface-muted, #eeeae4); } .ds-desktop-cue:focus-visible { outline: 2px solid var(--accent, #b6450f); outline-offset: -3px; } .ds-desktop-time { display: flex; justify-content: space-between; color: var(--ink-secondary, #69645e); font-size: 0.6875rem; font-variant-numeric: tabular-nums; margin-bottom: 6px; } .ds-desktop-cue[aria-current] .ds-desktop-time { color: var(--accent, #b6450f); } .ds-desktop-cue-text { font-size: 0.8125rem; line-height: 1.75; white-space: pre-line; overflow-wrap: anywhere; } .ds-desktop-cue[aria-current] .ds-desktop-cue-text { font-weight: 600; }"
+    },
+    {
+      "name": "桌面字幕编辑字段",
+      "kind": "input",
+      "refersTo": "desktop-editor-input",
+      "description": "字幕编辑表单的秒数与文本字段；毫秒步长、可见标签、并排时间字段和独立滚动。样例只展示字段，不执行保存。",
+      "html": "<div class=\"ds-desktop-editor\"><div class=\"ds-desktop-times\"><label>开始（秒）<input type=\"number\" min=\"0\" step=\"0.001\" value=\"12\"></label><label>结束（秒）<input type=\"number\" min=\"0\" step=\"0.001\" value=\"15\"></label></div><label>字幕文本<textarea rows=\"3\">字幕内容</textarea></label></div>",
+      "css": ".ds-desktop-editor { font-family: 'MiSans', 'Mi Sans', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif; font-synthesis: none; padding: 12px 16px; border-top: 1px solid var(--line, #dedbd5); background: var(--paper, #f8f4ed); font-size: 0.75rem; line-height: 1.6; overflow: auto; } .ds-desktop-times { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; margin-bottom: 8px; } .ds-desktop-editor label { display: grid; gap: 4px; color: var(--ink-secondary, #69645e); } .ds-desktop-editor input, .ds-desktop-editor textarea { width: 100%; min-width: 0; border: 1px solid var(--line, #dedbd5); border-radius: 8px; padding: 7px 8px; color: var(--ink, #383838); background: var(--surface, #fffdf9); font: inherit; caret-color: var(--accent, #b6450f); } .ds-desktop-editor textarea { resize: vertical; min-height: 64px; } .ds-desktop-editor input:focus-visible { outline: 2px solid var(--accent, #b6450f); outline-offset: 2px; }"
+    },
+    {
+      "name": "桌面保存修改",
+      "kind": "button",
+      "refersTo": "desktop-editor-save",
+      "description": "编辑表单中的紧凑保存按钮；无修改、内容无效或保存中禁用。沿用独立白字按钮实底。",
+      "html": "<button type=\"button\" class=\"ds-desktop-save\">保存修改</button>",
+      "css": ".ds-desktop-save { font-family: 'MiSans', 'Mi Sans', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif; font-synthesis: none; display: inline-flex; align-items: center; gap: 8px; min-height: 32px; padding: 6px 12px; border: 1px solid var(--primary-fill, #b6450f); border-radius: 8px; background: var(--primary-fill, #b6450f); color: #fff; font-size: 0.75rem; font-weight: 600; line-height: 1.6; cursor: pointer; } .ds-desktop-save:focus-visible { outline: 2px solid var(--accent, #b6450f); outline-offset: 4px; } .ds-desktop-save:disabled { opacity: 0.6; cursor: not-allowed; }"
+    },
+    {
+      "name": "桌面播放下拉",
+      "kind": "input",
+      "description": "保留原生 select 交互，Phosphor CaretDown 独立绘制；箭头距右边 12px，文本预留 38px，完整清晰度文本不截断。",
+      "html": "<span class=\"ds-desktop-select\"><select aria-label=\"视频清晰度\"><option>1080p · 1920×1080</option><option>720p · 1280×720</option></select><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 256 256\" fill=\"currentColor\" aria-hidden=\"true\"><path d=\"M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z\"></path></svg></span>",
+      "css": ".ds-desktop-select { font-family: 'MiSans', 'Mi Sans', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif; font-synthesis: none; position: relative; display: inline-flex; min-width: 0; max-width: 100%; font-size: 0.8125rem; flex-shrink: 0; } .ds-desktop-select select { appearance: none; width: 100%; min-height: 32px; border: 1px solid var(--line, #dedbd5); border-radius: 8px; background: var(--surface, #fffdf9); color: var(--ink, #383838); padding: 4px 38px 4px 10px; font: inherit; } .ds-desktop-select > svg { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); pointer-events: none; color: var(--ink-secondary, #69645e); } .ds-desktop-select select:focus-visible { outline: 2px solid var(--accent, #b6450f); outline-offset: 2px; }"
     }
   ],
   "narrative": {

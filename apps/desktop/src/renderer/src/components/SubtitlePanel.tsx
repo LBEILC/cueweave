@@ -1,4 +1,10 @@
-import { CrosshairIcon, MagnifyingGlassIcon, SubtitlesIcon, XIcon } from '@phosphor-icons/react';
+import {
+  CrosshairIcon,
+  MagnifyingGlassIcon,
+  PencilSimpleIcon,
+  SubtitlesIcon,
+  XIcon,
+} from '@phosphor-icons/react';
 import { useMemo, useRef, useState, type ReactNode } from 'react';
 
 export interface SubtitleCue {
@@ -13,7 +19,7 @@ function timestamp(seconds: number) {
   return `${hours ? `${hours}:` : ''}${String(Math.floor((whole % 3600) / 60)).padStart(2, '0')}:${String(whole % 60).padStart(2, '0')}`;
 }
 
-/** Read-only track view. D1 editing can attach here without changing the player shell. */
+/** Shared subtitle navigation, with project editing attached alongside playback. */
 export function SubtitlePanel({
   cues,
   position,
@@ -21,6 +27,10 @@ export function SubtitlePanel({
   onSeek,
   onClose,
   children,
+  onEdit,
+  editor,
+  tools,
+  locked = false,
 }: {
   cues: SubtitleCue[];
   position: number;
@@ -28,10 +38,14 @@ export function SubtitlePanel({
   onSeek: (seconds: number) => void;
   onClose: () => void;
   children: ReactNode;
+  onEdit?: ((index: number) => void) | undefined;
+  editor?: ReactNode;
+  tools?: ReactNode;
+  locked?: boolean;
 }) {
   const [query, setQuery] = useState('');
   const listRef = useRef<HTMLDivElement>(null);
-  const activeIndex = cues.findIndex((cue) => position >= cue.start && position <= cue.end);
+  const activeIndex = cues.findIndex((cue) => position >= cue.start && position < cue.end);
   const search = query.trim().toLocaleLowerCase();
   const matches = useMemo(
     () =>
@@ -47,10 +61,17 @@ export function SubtitlePanel({
           <SubtitlesIcon size={19} aria-hidden="true" />
           字幕 <span>{cues.length || ''}</span>
         </h2>
-        <button type="button" className="quiet-button" aria-label="收起字幕面板" onClick={onClose}>
+        <button
+          type="button"
+          className="quiet-button"
+          aria-label="收起字幕面板"
+          onClick={onClose}
+          disabled={locked}
+        >
           <XIcon size={18} aria-hidden="true" />
         </button>
       </div>
+      {tools}
       <details className="subtitle-source-options" open={cues.length === 0}>
         <summary title={name}>{name ?? '字幕来源'}</summary>
         <div className="subtitle-source">{children}</div>
@@ -84,25 +105,41 @@ export function SubtitlePanel({
           </div>
           <div className="subtitle-list" ref={listRef}>
             {matches.map(({ cue, index }) => (
-              <button
-                key={index}
-                type="button"
-                className={`subtitle-row${index === activeIndex ? ' is-current' : ''}`}
-                data-cue-index={index}
-                aria-current={index === activeIndex ? 'true' : undefined}
-                onClick={() => onSeek(cue.start)}
-              >
-                <span className="cue-time">
-                  {timestamp(cue.start)}{' '}
-                  <span>{index === activeIndex ? '当前' : String(index + 1).padStart(2, '0')}</span>
-                </span>
-                <span className="cue-text">{cue.text}</span>
-              </button>
+              <div className="subtitle-row-container" key={index}>
+                <button
+                  key={index}
+                  type="button"
+                  className={`subtitle-row${index === activeIndex ? ' is-current' : ''}`}
+                  data-cue-index={index}
+                  aria-current={index === activeIndex ? 'true' : undefined}
+                  onClick={() => onSeek(cue.start)}
+                >
+                  <span className="cue-time">
+                    {timestamp(cue.start)}{' '}
+                    <span>
+                      {index === activeIndex ? '当前' : String(index + 1).padStart(2, '0')}
+                    </span>
+                  </span>
+                  <span className="cue-text">{cue.text}</span>
+                </button>
+                {onEdit && (
+                  <button
+                    type="button"
+                    className="cue-edit-button quiet-button"
+                    aria-label={`编辑第 ${index + 1} 条字幕`}
+                    disabled={locked}
+                    onClick={() => onEdit(index)}
+                  >
+                    <PencilSimpleIcon size={16} aria-hidden="true" />
+                  </button>
+                )}
+              </div>
             ))}
             {matches.length === 0 && (
               <p className="panel-empty">没有匹配的字幕。试试其他关键词。</p>
             )}
           </div>
+          {editor}
           <div className="panel-footer">
             {search ? `${matches.length} 条匹配` : '点击字幕定位播放'}
           </div>

@@ -15,6 +15,7 @@ import type {
 } from '../shared/service';
 import type { DesktopErrorCode, LinkImportProgress, MediaProbe } from '../shared/bridge';
 import type { DownloadedMedia, SubtitleRequest } from '../shared/service';
+import type { ProjectServiceRequest, ProjectServiceReply } from '../services/projects';
 
 interface PendingRequest {
   generation: number;
@@ -69,6 +70,9 @@ export class DesktopServiceHost {
 
   async storageCheck(): Promise<StorageCheck> {
     return (await this.request('storageCheck', {})) as StorageCheck;
+  }
+  async project(request: ProjectServiceRequest): Promise<ProjectServiceReply> {
+    return (await this.request('project', request, 30 * 60_000)) as ProjectServiceReply;
   }
 
   async probeMedia(inputPath: string): Promise<MediaProbe> {

@@ -149,6 +149,7 @@ async function check(mode, rendererUrl) {
         'pickMedia',
         'pickPlayerSubtitle',
         'probeMedia',
+        'projectCommand',
         'registerDroppedMedia',
         'startLinkImport',
       ],
@@ -219,6 +220,10 @@ async function check(mode, rendererUrl) {
     }
     await page.emulateMedia({ colorScheme: 'light', reducedMotion: 'reduce' });
     await page.evaluate(() => document.fonts.ready);
+    await page.getByRole('button', { name: '全屏', exact: true }).click();
+    await page.waitForFunction(() => Boolean(document.fullscreenElement));
+    await page.getByRole('button', { name: '退出全屏', exact: true }).click();
+    await page.waitForFunction(() => !document.fullscreenElement);
     // The desktop workspace must fit the window, including controls, at every supported size.
     for (const [width, height] of [
       [1120, 720],

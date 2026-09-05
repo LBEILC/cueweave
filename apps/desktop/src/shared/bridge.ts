@@ -1,4 +1,6 @@
+import type { ProjectCommand, ProjectReply } from './project';
 export const DESKTOP_CHANNELS = {
+  project: 'cueweave:project:command',
   appInfo: 'cueweave:app:info',
   fontLicense: 'cueweave:app:font-license',
   mediaPick: 'cueweave:media:pick',
@@ -120,6 +122,7 @@ export type LinkImportEvent =
   | { type: 'failed'; jobId: string; code: DesktopErrorCode; message: string };
 
 export type DesktopErrorCode =
+  | 'PROJECT_ERROR'
   | 'INVALID_REQUEST'
   | 'FORBIDDEN'
   | 'UNAVAILABLE'
@@ -141,6 +144,7 @@ export type DesktopResult<T> =
     };
 
 export interface DesktopBridge {
+  projectCommand: (command: ProjectCommand) => Promise<DesktopResult<ProjectReply>>;
   getAppInfo: () => Promise<DesktopResult<AppInfo>>;
   openFontLicense: () => Promise<DesktopResult<null>>;
   pickMedia: () => Promise<DesktopResult<MediaAsset | null>>;
@@ -173,6 +177,7 @@ export function isEmptyRequest(value: unknown): value is Record<string, never> {
 
 export function desktopError(code: DesktopErrorCode): DesktopResult<never> {
   const messages = {
+    PROJECT_ERROR: '项目操作未完成，请重试。',
     INVALID_REQUEST: '请求格式不正确，请重新打开窗口。',
     FORBIDDEN: '当前页面无法访问桌面功能，请重新打开应用。',
     UNAVAILABLE: '桌面操作未完成，请重试。',
