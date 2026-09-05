@@ -1,0 +1,85 @@
+{
+  "schema": 1,
+  "version": "reference-v1",
+  "datasetVersion": "translation-benchmark-v1",
+  "author": "Codex assistant",
+  "status": "assistant-authored; not-human-gold; not-audio-audited",
+  "referencePath": ".fixtures/translation-benchmark/references/v1/references.json",
+  "readablePath": ".fixtures/translation-benchmark/references/v1/REFERENCES.md",
+  "sha256": "a072bd2041866095cad28945cc0901995b625097cb926d1147c20479ca254e5e",
+  "count": 18,
+  "inputs": [
+    {
+      "id": "interview-hey",
+      "inputSha256": "1f8726e3c9df9326284a7c86ee76596445ba920247429a39423a8cb147a87d08"
+    },
+    {
+      "id": "interview-entities",
+      "inputSha256": "805de196c9387b12e825081ad6832ab7a4eec9c1be34cc40be47576fe5c2f9d8"
+    },
+    {
+      "id": "interview-conditions",
+      "inputSha256": "c53b27b6904459abe73510f48191802ace98c3d742f6d3e0a62a5d96fbb448b5"
+    },
+    {
+      "id": "food-preferences",
+      "inputSha256": "2bc3a8451022ea6793e11a7364bf5a41b1560120c171c5a7670a6158578b21b9"
+    },
+    {
+      "id": "food-frequency",
+      "inputSha256": "ce25bad371581433319f6213eb478e9f3e892be263f6ed9a0c126da88742fc99"
+    },
+    {
+      "id": "food-dislike",
+      "inputSha256": "44daa0c90c7ccdc86ae61a0e389a1a859870a927096d9bd3984ce1ca43642622"
+    },
+    {
+      "id": "science-defense",
+      "inputSha256": "87313d9e093c573d882860d79821ca3396c3194dfee35530236fd98cb88b96e2"
+    },
+    {
+      "id": "science-risk",
+      "inputSha256": "7b2a443a194a457acc5249edd23e28b75648b153a33b66c49ef251a54b11210c"
+    },
+    {
+      "id": "science-types",
+      "inputSha256": "27f686d3bc02bd61b7512436b6ae29d52312fa9a4b91c507f462a2598a6f9900"
+    },
+    {
+      "id": "math-task",
+      "inputSha256": "664fc86ffed6c5adaa6f0b60e857b68acc4d9319bea8da592a299759aff59687"
+    },
+    {
+      "id": "math-pixels",
+      "inputSha256": "4765b28eeced51d84bffbf75da481d9b505621dccd07044c379aabac4d33d1b1"
+    },
+    {
+      "id": "math-propagation",
+      "inputSha256": "4ee78b2548ceeb4e3a023bdc4c9994394369a78ae97c8741d3aa2bfa920a9d8e"
+    },
+    {
+      "id": "story-childhood",
+      "inputSha256": "bdd3cbf5875fdc6aa0cc71ff28225ef2a24658545d27714fcd03ce3eb613751b"
+    },
+    {
+      "id": "story-identity",
+      "inputSha256": "d46449811655a63e06f7ca9724459d09960b071ea9f9b942ccf6aa19e0e4cf7e"
+    },
+    {
+      "id": "story-fide",
+      "inputSha256": "2c74f0bfdeca541cd8d070b0fcc5c611ec998ab7d235d075b64fd76f902282fd"
+    },
+    {
+      "id": "science-defense-asr",
+      "inputSha256": "39afc3e0ca9cbe10b0f8d20853aac19318ac521955e6731624d1f8d77f73ef54"
+    },
+    {
+      "id": "science-risk-asr",
+      "inputSha256": "58a0733daccaad403670eb4640422c101811f8b7f01c68acf47f162e3cd0962b"
+    },
+    {
+      "id": "science-types-asr",
+      "inputSha256": "1058e8d42e456fb5478ade1eaa37c9ed4a126aee4543585b8db0e019f741a30a"
+    }
+  ]
+}

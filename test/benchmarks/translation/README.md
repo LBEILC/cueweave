@@ -1,6 +1,6 @@
 # 翻译测试集 v1
 
-用于英语字幕到简体中文的算法与提示词回归。原文于 2026-09-05 整理；不运行翻译、不修改生产算法、不需要模型密钥。首版按来源视频划分 development 与 holdout，避免同一视频不同片段泄漏到两边。
+用于英语字幕到简体中文的算法与提示词回归。原文于 2026-09-05 整理；准备工具不调用模型。首版按来源视频划分 development 与 holdout，避免同一视频不同片段泄漏到两边。另提供生产首轮运行器和参考译文评审工具，不修改生产算法。
 
 - 主测试集：5 个视频、15 段计分原文，约 11.43 分钟。
 - 日常调试：9 段；其中 3 段为 smoke，约 2.06 分钟。
@@ -20,7 +20,7 @@
 
 精确毫秒、标签、逐段检查要点、字幕 SHA-256 见 [manifest.json](manifest.json)。标题和频道来自本次取得的视频元数据。字幕正文、下载元数据和本地评审产物留在 Git 忽略的 `.fixtures/`；仓库只保存清单、检查要点和准备工具。
 
-这是一份**已检查原文的候选回归集**，还不是带人工金标准的翻译基准。没有生成中文参考答案，没有逐段听音校对，不以“人工字幕轨”推定绝对正确，也不声称已覆盖口音识别质量。保留集只做选材检查，未用其模型输出调优。
+这是一份**已检查原文的回归集**，另配有助手撰写的 18 段中文参考译文，仍不是人工金标准。未逐段听音校对，不以“人工字幕轨”推定绝对正确，也不声称已覆盖口音识别质量。参考在首次模型基线之前冻结；保留集已用于基线评审，尚未据其输出修改提示词或算法。
 
 ## 本机使用
 
@@ -51,8 +51,8 @@ node --import tsx scripts/prepare-translation-benchmark.ts build --out .fixtures
 ## 后续 A/B 约定
 
 1. 先跑 `smoke: true` 的 3 段，再跑全部 development 主样本；方案冻结后运行 holdout。诊断 ASR 对照单独汇总。
-2. 以 **production-first-pass** 为实时翻译基线：使用共享的 `PlaybackPlan` 与 `translateFirstPass`。本次只准备数据，不新增模型运行器；不要直接把这个输入格式传给接收 JSON3 的旧命令。
-3. 现有 `eval:translate` 调用的是 `translateTokenWindow` 的严格复核路径，不等于生产首轮路径；可另立实验，但必须标明实际入口。首次接入本集时应新增薄适配器，直接调用现有共享函数，不复制翻译实现。
+2. 以 **production-first-pass** 为实时翻译基线：`scripts/run-translation-benchmark.ts` 直接使用共享 `PlaybackPlan` 和 `translatePlaybackWindow`（内部调用 `translateFirstPass`），不复制翻译实现。不要直接把这个输入格式传给接收 JSON3 的旧命令。
+3. 现有 `eval:translate` 调用的是 `translateTokenWindow` 的严格复核路径，不等于生产首轮路径；可另立实验，但必须标明实际入口。新的片段运行器依次处理片段和窗口，不模拟浏览器缓存、并发预取或真实播放等待。
 4. 提示词 A/B 固定规划后的窗口和模型配置；窗口算法 A/B 固定提示词，记录切点与额外规划调用。每个样本各自从空翻译记忆开始，前文译文只能在该样本中按时间顺序产生，不能跨视频继承。
 5. 默认固定上下文只含本片段及 padding 提取的原文证据、真实标题和频道；`terminology`、`entityAliases`、`previousCues` 均为空。不得使用旧模型结果或评审标签构造上下文。需要全片实体归并时，单列 pipeline 模式，使用本来源的全片原文并计入调用成本，不能混入固定上下文对比。
 6. 模型处理 `tokens` 的完整上下文范围，评审只聚焦 `scoreTokenIds`。评分边缘若与输出 unit 交叉，连同该 unit 和附近原文审阅，不能强制以计分端点重分段。
@@ -72,6 +72,41 @@ node --import tsx scripts/prepare-translation-benchmark.ts build --out .fixtures
 盲评时随机隐藏 A/B 身份；先按视频汇总再计算宏平均，同时保留逐段关键错误和分项结果。主集 15 段中仍有 3 段来自旧访谈，报告应同时给出旧回归与新增来源结果，不能将“全通过”解释成通用准确率。
 
 后续若根据 holdout 的具体输出调整了提示词，该批 holdout 就已参与开发；应记录暴露并在下一版本补入新视频，而不是继续宣称未见数据。多人抢话、强噪声、法律/商业术语、更多自然口音等是后续扩充方向；本次先保持小而可审阅。
+
+## 参考译文与模型基线
+
+本机参考文件为 `.fixtures/translation-benchmark/references/v1/references.json`，可读版为同目录的 `REFERENCES.md`。[reference-index.json](reference-index.json) 记录冻结哈希与对应输入哈希；参考正文留在本地，不进入模型请求或仓库。
+
+每段包括通顺的参考译文、逐项语义要点、可接受变体，以及切片边缘补全说明。参考不锁定字幕条数、标点或中文措辞；原文优先于参考。保守保留不确定的 ASR 名称是有效结果，例如未提供映射的 Soul 或 T-C cells。因上下文补全而写入参考的边缘内容不能成为额外漏译扣分项。
+
+```powershell
+# 无网络预检，不读取密钥或创建输出
+node --import tsx scripts/run-translation-benchmark.ts --out .eval/benchmarks/trial --group smoke --dry-run
+
+# 真实模型基线，目录必须不存在；也支持 development、holdout、diagnostic、all
+node --import tsx scripts/run-translation-benchmark.ts --out .eval/benchmarks/trial --group smoke --token-file C:/Users/LBLC/.v3-llm-token --max-requests 30
+```
+
+默认模型、端点及协议跟随仓库 Provider 默认配置，可用 `--model`、`--base-url`、`--protocol` 显式覆盖。不读取浏览器个人设置。`--resume` 要求相同输入、参数与源码；按片段复用最后一次完整结果，失败片段保留历史并重新运行。每次启动单独计算请求预算；报告用量包含历史请求。初次失败证据不要用续跑后的结果覆盖评价。
+
+运行器只读数据输入，按白名单构造模型上下文，**不读取参考译文、语义检查项或评审文件**。每段从空术语记忆开始，在段内继承已接受译文及自动术语；不运行全片实体归并。输出保存全部真实请求、原始响应、源码快照、输入快照、逐窗口结果、缺失词元和汇总。完整候选与最终交付可能不同，应分别定位模型错误与校验/恢复错误。
+
+本机首轮基线位于 `.eval/benchmarks/reference-v1-baseline/`；参考先行冻结后才调用模型，没有基于这轮结果修改生产算法或提示词。
+
+评审通过独立 JSON 提供，由人或评审助手对照原文填写；报告工具不通过字符串相似度自动给模型打分，也不会再次调用模型。`judgments` 顶层需记录 `runFingerprint`、`runResultSha256`、`referenceSha256` 和 `reviewer`。每个片段记录：
+
+- `meaningVerdicts`：与参考语义要点逐项对应的 `pass`、`partial`、`fail`、`unavailable` 或 `context-only`。未产出单列；边界外内容不计分。
+- `fluency`：只对已输出中文评 1–5 分，不能抵消漏译或输出不完整。
+- `verdict`：`usable`、`needs-polish`、`needs-fix` 或 `incomplete`。
+- `issues`：类别、严重程度、最终字幕数组中的从 0 开始索引、原文与译文证据；校验失败没有最终字幕时使用空索引并引用原始请求记录。
+- `notes`：说明可接受变体、判断依据或不确定性。
+
+```powershell
+# 本机已存在的助手评审；换新运行时须重新核对并填写 judgments
+node --import tsx scripts/report-translation-benchmark.ts --run .eval/benchmarks/reference-v1-baseline --judgments .eval/benchmarks/reference-v1-baseline/judgments-v2.json --out .eval/benchmarks/reference-v1-baseline/assessment-new
+```
+
+输出目录必须不存在。工具核对输入、参考与模型输出快照的哈希，拒绝把旧判断套到续跑的新结果；不完整输出不能标为可用。结果分主集、开发、保留及诊断四种视图，分别记录完整产出、语义要点和展示风险。语义要点保留比例是本集的助手评审结果，不是通用翻译准确率。原始数据准备工具中的空评审模板不等于这里已经完成的逐项评审。
 
 ## 原始数据恢复与版本管理
 
