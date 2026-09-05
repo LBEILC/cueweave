@@ -1,9 +1,32 @@
 import { describe, expect, it } from 'vitest';
-import { parseImportedSubtitles } from './subtitle-import';
+import { parseImportedSubtitles, parseOnlineSubtitles } from './subtitle-import';
 import { isProjectCommand } from '../shared/project';
 
 const parse = (text: string, duration = 10000) =>
   parseImportedSubtitles(new TextEncoder().encode(text), duration);
+describe('online platform WebVTT', () => {
+  it('accepts whitespace payload rows and timed clear-screen cues without losing spoken text', () => {
+    const text =
+      'WEBVTT\r\nKind: captions\r\nLanguage: en\r\n\r\n00:00:00.400 --> 00:00:02.550 align:start\r\n \r\nHello,<00:00:00.880><c> everyone.</c>\r\n\r\n00:00:02.550 --> 00:00:02.560\r\nHello, everyone.\r\n \r\n\r\n00:00:02.560 --> 00:00:05.110\r\nHello, everyone.\r\n&gt;&gt; Welcome<00:00:03.000><c> back.</c>\r\n\r\n00:00:05.110 --> 00:00:06.000\r\n \r\n';
+    const cues = parseOnlineSubtitles(text);
+    expect(cues).toEqual([
+      { id: '1', startMs: 400, endMs: 2550, text: 'Hello, everyone.' },
+      { id: '2', startMs: 2550, endMs: 2560, text: 'Hello, everyone.' },
+      { id: '3', startMs: 2560, endMs: 5110, text: 'Hello, everyone.\n>> Welcome back.' },
+    ]);
+    // Strict project imports retain their existing validation semantics.
+    expect(() => parse(text)).toThrow('字幕为空或过长');
+  });
+  it('still rejects invalid timestamps, empty tracks and non-VTT input', () => {
+    for (const content of [
+      'WEBVTT\n\n00:00:02.000 --> 00:00:01.000\n ',
+      'WEBVTT\n\n00:00:00.000 --> 00:00:01.000\n ',
+      'WEBVTT\n\n00:00:99.000 --> 00:02:00.000\ntext',
+      'not a subtitle',
+    ])
+      expect(() => parseOnlineSubtitles(content)).toThrow();
+  });
+});
 describe('project subtitle import', () => {
   it('preserves millisecond times, intentional overlaps, repetitions, and UTF-8 BOM', () => {
     const result = parse(

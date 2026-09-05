@@ -21,7 +21,7 @@ import type { SiteAuthManager } from './site-auth';
 import type { SettingsStore } from './settings-store';
 import type { OnlineTranslator } from './online-translator';
 import { validOnlineTranslationCommand } from '../shared/online-translation';
-import { parseImportedSubtitles } from '../services/subtitle-import';
+import { parseOnlineSubtitles } from '../services/subtitle-import';
 import type { TranslationCue } from '@cueweave/core/provider/cueTranslation';
 import { normalizeRollingCues } from '@cueweave/core/provider/rollingCues';
 
@@ -306,10 +306,7 @@ export function registerAppIpc(options: {
           }),
       );
       if (generation !== subtitleGeneration) return desktopError('CANCELLED');
-      const parsed = parseImportedSubtitles(
-        new TextEncoder().encode(value.content),
-        604800000,
-      ).cues;
+      const parsed = parseOnlineSubtitles(value.content);
       const cues = subtitle.kind === 'automatic' ? normalizeRollingCues(parsed) : parsed;
       const sourceId = randomUUID();
       loadedSubtitles.clear();

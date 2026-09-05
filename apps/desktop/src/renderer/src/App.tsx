@@ -1,4 +1,5 @@
 import { useOnlineTranslation } from './use-online-translation';
+import { syncIndependentAudio } from './media-sync';
 import { OnlineTranslationTools } from './components/OnlineTranslationTools';
 import type { OnlineSubtitleSource } from '../../shared/online-translation';
 import { SelectControl } from './components/SelectControl';
@@ -101,6 +102,7 @@ export function App() {
   const workspaceRef = useRef<HTMLElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
+  const audioSync = useRef({ waiting: false });
   const linkJobRef = useRef('');
   const qualityResumeRef = useRef<{ positionSeconds: number; paused: boolean } | null>(null);
   const [editingCueId, setEditingCueId] = useState('');
@@ -214,6 +216,7 @@ export function App() {
   useEffect(() => {
     const video = videoRef.current;
     const audio = audioRef.current;
+    audioSync.current.waiting = false;
     if (!videoUrl || !video) {
       setPlayer(idlePlayer);
       return;
@@ -247,6 +250,7 @@ export function App() {
     };
     void start();
     return () => {
+      audioSync.current.waiting = false;
       video.pause();
       audio?.pause();
     };
@@ -492,13 +496,16 @@ export function App() {
     const duration = Number.isFinite(video.duration) ? video.duration : positionSeconds;
     const next = Math.max(0, Math.min(duration, positionSeconds));
     video.currentTime = next;
-    if (audioRef.current) audioRef.current.currentTime = next;
     setPlayer((current) => ({ ...current, positionSeconds: next }));
   }
 
   async function togglePause() {
     const video = videoRef.current;
     if (!video) return;
+    if (audioSync.current.waiting) {
+      pausePlayback();
+      return;
+    }
     if (video.paused || video.ended) {
       if (video.ended) seekTo(0);
       await video
@@ -506,17 +513,21 @@ export function App() {
         .catch(() =>
           setPlayer((current) => ({ ...current, phase: 'error', error: '无法继续播放视频。' })),
         );
-    } else video.pause();
+    } else pausePlayback();
+  }
+
+  function pausePlayback() {
+    audioSync.current.waiting = false;
+    videoRef.current?.pause();
+    audioRef.current?.pause();
+    setPlayer((current) => ({ ...current, phase: 'paused' }));
   }
 
   function syncAudio(force = false) {
     const video = videoRef.current;
     const audio = audioRef.current;
     if (!video || !audio) return;
-    if (force || Math.abs(audio.currentTime - video.currentTime) > 0.3)
-      audio.currentTime = video.currentTime;
-    audio.playbackRate = video.playbackRate;
-    if (!video.paused && !video.ended) void audio.play().catch(() => {});
+    syncIndependentAudio(video, audio, audioSync.current, force);
   }
 
   function setVolume(volume: number) {
@@ -542,7 +553,7 @@ export function App() {
     if (!video || id === selectedVariant?.id) return;
     qualityResumeRef.current = {
       positionSeconds: video.currentTime,
-      paused: video.paused,
+      paused: video.paused && !audioSync.current.waiting,
     };
     setSelectedVariantId(id);
   }
@@ -615,7 +626,10 @@ export function App() {
   const duration =
     player.durationSeconds ?? onlinePlayback?.durationSeconds ?? probe?.durationSeconds ?? 0;
   const displayedPosition = Math.min(seekValue ?? player.positionSeconds, duration || Infinity);
-  const playerUnavailable = !videoUrl || player.phase === 'loading' || player.phase === 'error';
+  const playerUnavailable =
+    !videoUrl ||
+    (player.phase === 'loading' && !audioSync.current.waiting) ||
+    player.phase === 'error';
   const subtitleTimePosition = player.positionSeconds - player.subtitleDelaySeconds;
   const visibleSubtitle = displayedCues
     .filter((cue) => subtitleTimePosition >= cue.start && subtitleTimePosition < cue.end)
@@ -759,8 +773,7 @@ export function App() {
             type="button"
             className="quiet-button"
             onClick={() => {
-              videoRef.current?.pause();
-              audioRef.current?.pause();
+              pausePlayback();
               setSettingsOpen(true);
             }}
           >
@@ -868,6 +881,7 @@ export function App() {
                     playsInline
                     preload="auto"
                     muted={Boolean(audioUrl) || player.muted}
+                    onCanPlay={() => syncAudio()}
                     onLoadedMetadata={(event) => {
                       const duration = event.currentTarget.duration;
                       setPlayer((current) => ({
@@ -882,7 +896,6 @@ export function App() {
                           ? Math.min(resume.positionSeconds, duration)
                           : resume.positionSeconds;
                         event.currentTarget.currentTime = position;
-                        if (audioRef.current) audioRef.current.currentTime = position;
                         qualityResumeRef.current = null;
                         if (resume.paused) event.currentTarget.pause();
                         else void event.currentTarget.play().catch(() => {});
@@ -916,7 +929,11 @@ export function App() {
                       audioRef.current?.pause();
                       setPlayer((current) => ({
                         ...current,
-                        phase: videoRef.current?.ended ? 'ended' : 'paused',
+                        phase: videoRef.current?.ended
+                          ? 'ended'
+                          : audioSync.current.waiting
+                            ? 'loading'
+                            : 'paused',
                       }));
                     }}
                     onWaiting={() => {
@@ -941,11 +958,13 @@ export function App() {
                     <audio
                       ref={audioRef}
                       src={audioUrl}
-                      autoPlay
                       preload="auto"
                       muted={player.muted}
                       aria-hidden="true"
+                      onLoadedData={() => syncAudio(true)}
                       onCanPlay={() => syncAudio()}
+                      onSeeked={() => syncAudio()}
+                      onWaiting={() => syncAudio()}
                       onError={() =>
                         setPlayer((current) => ({
                           ...current,
@@ -982,7 +1001,7 @@ export function App() {
                     project
                       ? (index) => {
                           setEditingCueId(project.cues[index]?.id ?? '');
-                          videoRef.current?.pause();
+                          pausePlayback();
                         }
                       : undefined
                   }
@@ -993,8 +1012,7 @@ export function App() {
                         available={Boolean(onlineSource)}
                         loading={onlineSubtitleLoading}
                         openSettings={() => {
-                          videoRef.current?.pause();
-                          audioRef.current?.pause();
+                          pausePlayback();
                           setSettingsOpen(true);
                         }}
                       />

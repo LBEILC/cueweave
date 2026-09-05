@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { applySubtitleReview } from './subtitleReview';
+import { applySubtitleReview, copiesSourceOverChinese } from './subtitleReview';
 import { translateFirstPass } from './firstPass';
 
 const units = [
@@ -14,6 +14,42 @@ const edit = {
 };
 
 describe('sparse subtitle review', () => {
+  it('rejects returning English source over a Chinese sentence, including punctuation-only changes', () => {
+    const unit = { id: 0, source: 'Where can we buy tickets?', translation: '我们可以在哪里购票' };
+    for (const translation of [
+      unit.source,
+      'where can we buy tickets',
+      'Where　can we buy tickets！',
+    ]) {
+      expect(() =>
+        applySubtitleReview(
+          { edits: [{ id: 0, sourceQuote: 'buy tickets', problem: '修改用词', translation }] },
+          [unit],
+        ),
+      ).toThrow('退回整段英文');
+    }
+  });
+  it('preserves bilingual explanations, short names, verbatim glossary terms and already-English drafts', () => {
+    expect(
+      copiesSourceOverChinese(
+        { source: 'What does usually mean?', translation: '通常是什么意思' },
+        'usually 表示通常',
+      ),
+    ).toBe(false);
+    expect(copiesSourceOverChinese({ source: 'New York', translation: '纽约' }, 'New York')).toBe(
+      false,
+    );
+    const name = 'The Lord of the Rings';
+    expect(copiesSourceOverChinese({ source: name, translation: '指环王' }, name, [name])).toBe(
+      false,
+    );
+    expect(
+      copiesSourceOverChinese(
+        { source: 'This is original English', translation: 'This is original English' },
+        'This is original English',
+      ),
+    ).toBe(false);
+  });
   it('ignores a no-op proposal so it cannot block a separate evidence-backed correction', () => {
     expect([
       ...applySubtitleReview(

@@ -24,6 +24,7 @@ export const REVISION_SCHEMA = {
 export function applySubtitleReview(
   output: unknown,
   units: readonly { id: number; source: string; translation: string }[],
+  verbatimTerms: readonly string[] = [],
 ): Map<number, string> {
   const record = (v: unknown): v is Record<string, unknown> =>
     typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -56,7 +57,31 @@ export function applySubtitleReview(
     if (unit.translation === edit.translation) continue;
     if (!unit.source.includes(edit.sourceQuote))
       throw new Error('对照修订引用了未知 ID 或不属于该条原文的证据。');
+    if (copiesSourceOverChinese(unit, edit.translation, verbatimTerms))
+      throw new Error('对照修订将已有中文译文退回整段英文原文，保留初稿。');
     translations.set(unit.id, edit.translation);
   }
   return translations;
+}
+
+/** A conservative regression guard, not a general detector of translation quality. */
+export function copiesSourceOverChinese(
+  unit: { source: string; translation: string },
+  revised: string,
+  verbatimTerms: readonly string[] = [],
+): boolean {
+  const normalize = (text: string) =>
+    text
+      .normalize('NFKC')
+      .toLowerCase()
+      .replace(/[\p{P}\p{Z}\s]/gu, '');
+  // Short names, technical identifiers and already-English drafts can legitimately stay verbatim.
+  if (
+    !/\p{Script=Han}/u.test(unit.translation) ||
+    /\p{Script=Han}/u.test(revised) ||
+    (unit.source.match(/[A-Za-z]+(?:['’][A-Za-z]+)*/gu)?.length ?? 0) < 4
+  )
+    return false;
+  const source = normalize(unit.source);
+  return source === normalize(revised) && !verbatimTerms.some((term) => normalize(term) === source);
 }

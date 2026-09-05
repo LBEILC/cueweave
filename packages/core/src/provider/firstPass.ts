@@ -12,7 +12,7 @@ import { applySubtitleReview, REVISION_SCHEMA } from './subtitleReview';
 import { joinableSubtitleBoundary, subtitleRevisionReasons } from './subtitleRisk';
 export { buildFirstPassPrompt } from './subtitlePrompt';
 
-export const FIRST_PASS_VERSION = 'first-pass-v5';
+export const FIRST_PASS_VERSION = 'first-pass-v6';
 export type SubtitleJsonRequest = (
   stage: string,
   prompt: string,
@@ -388,7 +388,13 @@ export async function translateFirstPass(
           REVISION_SCHEMA,
         ),
       );
-      const translations = applySubtitleReview(output, units);
+      const translations = applySubtitleReview(
+        output,
+        units,
+        [...(context.terminology ?? []), ...(context.entityAliases ?? [])]
+          .filter((term) => term.source === term.translation)
+          .map((term) => term.source),
+      );
       const revised = inspect(
         JSON.stringify({
           units: candidate.units.map((unit, id) => ({

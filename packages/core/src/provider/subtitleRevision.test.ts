@@ -23,6 +23,34 @@ const output = (units: Array<[number, number, string]>) =>
   });
 
 describe('bounded source-grounded revision', () => {
+  it('keeps the Chinese draft when a cited revision copies the English sentence back', async () => {
+    const source = 'Where can we buy tickets?';
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce(output([[0, 4, '我们可以在哪里购票']]))
+      .mockResolvedValueOnce(
+        JSON.stringify({
+          edits: [
+            {
+              id: 0,
+              sourceQuote: source,
+              problem: '修改问句',
+              translation: source,
+            },
+          ],
+        }),
+      );
+    const result = await translateFirstPass(
+      tokens(source),
+      { translationMode: 'quality' },
+      {},
+      request,
+    );
+    expect(result.reviewStatus).toBe('failed');
+    expect(result.cues[0]!.translation).toBe('我们可以在哪里购票');
+    expect(result.missingTokenIds).toEqual([]);
+    expect(request).toHaveBeenCalledTimes(2);
+  });
   it('quality compares explicit source ranges and retains their fixed ownership', async () => {
     const request = vi
       .fn()

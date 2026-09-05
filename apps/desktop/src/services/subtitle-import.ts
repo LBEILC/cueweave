@@ -1,5 +1,37 @@
 import type { ProjectCue } from '../shared/project';
 
+/** Platform WebVTT can contain whitespace-only payload rows and empty clear-screen cues. */
+export function parseOnlineSubtitles(content: string): ProjectCue[] {
+  const normalized = content.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n');
+  if (!/^WEBVTT(?:[ \t].*)?(?:\n|$)/.test(normalized))
+    throw new Error('在线字幕不是有效的 WebVTT。');
+  // A row containing a space is part of a VTT cue payload, not an empty-line delimiter.
+  const blocks = normalized
+    .replace(/^[\t ]+\n/gm, '')
+    .trim()
+    .split(/\n{2,}/);
+  const encoder = new TextEncoder();
+  const retained = blocks.filter((block) => {
+    const lines = block.split('\n');
+    const index = lines[0]?.includes('-->') ? 0 : 1;
+    if (!lines[index]?.includes('-->')) return true;
+    const text = lines
+      .slice(index + 1)
+      .join('\n')
+      .replace(/<[^>]*>/g, '')
+      .replace(/&nbsp;/g, ' ')
+      .trim();
+    if (text) return true;
+    // Validate the timing even when this cue only clears a rolling caption from the screen.
+    parseImportedSubtitles(
+      encoder.encode(`WEBVTT\n\n${lines.slice(0, index + 1).join('\n')}\nclear`),
+      604800000,
+    );
+    return false;
+  });
+  return parseImportedSubtitles(encoder.encode(retained.join('\n\n')), 604800000).cues;
+}
+
 export function parseImportedSubtitles(
   bytes: Uint8Array,
   durationMs: number,
