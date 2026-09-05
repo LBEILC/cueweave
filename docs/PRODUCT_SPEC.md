@@ -1,4 +1,6 @@
-# CueWeave 产品需求
+# CueWeave 浏览器扩展产品需求
+
+本文范围为浏览器扩展，不代表整个 CueWeave 项目。桌面需求见[桌面规格](DESKTOP.md)，两端共用的算法、提示词和任务契约见[共享翻译核心](TRANSLATION-CORE.md)。
 
 ## 产品定义
 

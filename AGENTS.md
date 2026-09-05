@@ -17,3 +17,9 @@
 - During rapid iteration, do not build installers unless the user explicitly requests one. Validate with development/production builds and silent app acceptance instead. Requested on 2026-09-05.
 
 - Run automated playback and acceptance tests with audio output muted. Preserve normal interactive playback volume; do not change the user's system volume. The user requested silent tests on 2026-09-05.
+
+## Shared translation core
+
+- Algorithm, prompt, quality-policy and general validation work belongs to the shared translation core. Follow [TRANSLATION-CORE.md](docs/TRANSLATION-CORE.md) for responsibilities, current integration gaps and migration acceptance.
+- Keep platform input adapters, permissions, playback/project scheduling, storage and manual-edit protection in each app. Do not create independent copies of general translation prompts or mode definitions in apps or evaluation scripts.
+- Preserve cue timing when reliable word alignment is unavailable; sharing the core does not mean forcing semantic reflow. Distinguish implemented APIs from target contracts, and verify each host's integration separately.

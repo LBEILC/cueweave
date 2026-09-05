@@ -2,6 +2,8 @@
 
 <!-- impeccable:product-schema 1 -->
 
+本文维护浏览器扩展界面的产品上下文；整个项目由扩展、桌面和共享核心组成，职责与接入边界见[共享翻译核心](docs/TRANSLATION-CORE.md)。
+
 ## Platform
 
 web
@@ -24,7 +26,7 @@ Chromium 浏览器扩展。播放器承担阅读，Popup 承担当前视频状�
 
 ## Capabilities and Constraints
 
-沿用现有 WXT、React 与业务系统。数据边界遵循 [README 的设计边界](README.md#设计边界)；术语和导出行为遵循 [产品规格](docs/PRODUCT_SPEC.md)。预览数据与真实扩展存储隔离，明确标注示例内容。
+沿用现有 WXT、React 与业务系统。数据边界遵循 [README 的设计边界](README.md#浏览器扩展的设计边界)；术语和导出行为遵循 [产品规格](docs/PRODUCT_SPEC.md)。预览数据与真实扩展存储隔离，明确标注示例内容。
 
 ## Evidence on Hand
 
