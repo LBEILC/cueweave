@@ -1,0 +1,389 @@
+{
+  "schema": 1,
+  "version": "translation-benchmark-v1",
+  "createdAt": "2026-09-05",
+  "translationDirection": "English to Simplified Chinese",
+  "selectionPolicy": "Source-text-reviewed excerpts; split by video; no model output used in selection; no human translation gold or audio audit yet.",
+  "sources": [
+    {
+      "id": "interview-asr",
+      "videoId": "VeizK1M7V7E",
+      "url": "https://www.youtube.com/watch?v=VeizK1M7V7E",
+      "title": "Sam Altman on Astra, AGI, and the future of OpenAI",
+      "channel": "Sources Podcast",
+      "split": "development",
+      "genre": "technology-interview",
+      "languageCode": "en",
+      "trackCode": "en",
+      "trackKind": "asr",
+      "rawPath": ".fixtures/youtube/VeizK1M7V7E.en.full.json",
+      "sha256": "8606d7d0928e713ce346d27bcbf302ad8ce2a66bf7e70683a128888c43d4577f",
+      "sourceDurationSeconds": 4119,
+      "acquiredAt": "existing-local-snapshot; acquisition-date-not-recorded",
+      "metadataVerifiedAt": "2026-09-05"
+    },
+    {
+      "id": "food-manual",
+      "videoId": "4C4wlOAscvY",
+      "url": "https://www.youtube.com/watch?v=4C4wlOAscvY",
+      "title": "Talking about food 🍔🥒🍫 Real Easy English",
+      "channel": "BBC Learning English",
+      "split": "development",
+      "genre": "everyday-dialogue",
+      "languageCode": "en-GB",
+      "trackCode": "en-GB",
+      "trackKind": "manual",
+      "rawPath": ".fixtures/translation-benchmark/raw/4C4wlOAscvY.en-GB.json3",
+      "sha256": "3e1b24311908402ee95fae3b742619560acc9f5fb5ecaa911e180b1eb826659e",
+      "sourceDurationSeconds": 343,
+      "acquiredAt": "2026-09-05",
+      "metadataVerifiedAt": "2026-09-05"
+    },
+    {
+      "id": "science-manual",
+      "videoId": "rb7TVW77ZCs",
+      "url": "https://www.youtube.com/watch?v=rb7TVW77ZCs",
+      "title": "How do vaccines work? - Kelwalin Dhanasarnsombut",
+      "channel": "TED-Ed",
+      "split": "development",
+      "genre": "science-explanation",
+      "languageCode": "en",
+      "trackCode": "en",
+      "trackKind": "manual",
+      "rawPath": ".fixtures/translation-benchmark/raw/rb7TVW77ZCs.en.json3",
+      "sha256": "af7437e6655e118fe18912c7d25139c2c173a4ca87c441022f79013ea6e849ae",
+      "sourceDurationSeconds": 275,
+      "acquiredAt": "2026-09-05",
+      "metadataVerifiedAt": "2026-09-05"
+    },
+    {
+      "id": "science-asr",
+      "videoId": "rb7TVW77ZCs",
+      "url": "https://www.youtube.com/watch?v=rb7TVW77ZCs",
+      "title": "How do vaccines work? - Kelwalin Dhanasarnsombut",
+      "channel": "TED-Ed",
+      "split": "development",
+      "genre": "science-explanation",
+      "languageCode": "en",
+      "trackCode": "en-orig",
+      "trackKind": "asr",
+      "rawPath": ".fixtures/translation-benchmark/raw/rb7TVW77ZCs.en-orig.json3",
+      "sha256": "b23fb6770f1059772cf737f958dba27eba78446e50a24d7ad91088abe1cd698a",
+      "sourceDurationSeconds": 275,
+      "acquiredAt": "2026-09-05",
+      "metadataVerifiedAt": "2026-09-05"
+    },
+    {
+      "id": "math-manual",
+      "videoId": "aircAruvnKk",
+      "url": "https://www.youtube.com/watch?v=aircAruvnKk",
+      "title": "But what is a neural network? | Deep learning chapter 1",
+      "channel": "3Blue1Brown",
+      "split": "holdout",
+      "genre": "quantitative-explanation",
+      "languageCode": "en",
+      "trackCode": "en",
+      "trackKind": "manual",
+      "rawPath": ".fixtures/translation-benchmark/raw/aircAruvnKk.en.json3",
+      "sha256": "ecbd75e8d72ec09d39a644018e462ed4e34db5a35f791839271f868ee276aa45",
+      "sourceDurationSeconds": 1120,
+      "acquiredAt": "2026-09-05",
+      "metadataVerifiedAt": "2026-09-05"
+    },
+    {
+      "id": "story-manual",
+      "videoId": "D9Ihs241zeg",
+      "url": "https://www.youtube.com/watch?v=D9Ihs241zeg",
+      "title": "Chimamanda Ngozi Adichie: The Danger of a Single Story | TED",
+      "channel": "TED",
+      "split": "holdout",
+      "genre": "personal-narrative",
+      "languageCode": "en",
+      "trackCode": "en",
+      "trackKind": "manual",
+      "rawPath": ".fixtures/translation-benchmark/raw/D9Ihs241zeg.en.json3",
+      "sha256": "b3ba5dd2e9e4e8f02b89c7691c2c6955e52db7b4060192cccfd38cb281a521a6",
+      "sourceDurationSeconds": 1156,
+      "acquiredAt": "2026-09-05",
+      "metadataVerifiedAt": "2026-09-05"
+    }
+  ],
+  "cases": [
+    {
+      "id": "interview-hey",
+      "sourceId": "interview-asr",
+      "label": "口语引导词与跨条衔接",
+      "fromMs": 354560,
+      "toMs": 373440,
+      "contextMs": 15000,
+      "tier": "primary",
+      "smoke": true,
+      "tags": ["discourse-marker", "cross-cue"],
+      "checks": [
+        "检查 hey 与后续表达连接，不能悬在上一条末尾。",
+        "问候或引语不能仅剩称呼，跨条不可重复或漏义。"
+      ]
+    },
+    {
+      "id": "interview-entities",
+      "sourceId": "interview-asr",
+      "label": "陌生实体与保守纠错",
+      "fromMs": 786560,
+      "toMs": 811260,
+      "contextMs": 15000,
+      "tier": "primary",
+      "smoke": false,
+      "tags": ["proper-noun", "asr-noise"],
+      "checks": [
+        "检查 Astra 与 Soul/Sol 的范围和指代，不得替换为输入没有支持的熟悉模型名。",
+        "本集不注入旧实验的已确认别名；无法从本次输入确认时，保留源写法是可接受结果。"
+      ]
+    },
+    {
+      "id": "interview-conditions",
+      "sourceId": "interview-asr",
+      "label": "长条件句与并列动作",
+      "fromMs": 1309280,
+      "toMs": 1346400,
+      "contextMs": 15000,
+      "tier": "primary",
+      "smoke": false,
+      "tags": ["condition", "parallel-actions", "long-sentence"],
+      "checks": [
+        "保留条件与主句关系，以及投放模型和安全工作两个动作。",
+        "在完整意群间切分，不拆开修饰关系，不用缩写或概括消除实质内容。"
+      ]
+    },
+    {
+      "id": "food-preferences",
+      "sourceId": "food-manual",
+      "label": "双人对话与频率否定",
+      "fromMs": 69000,
+      "toMs": 125000,
+      "contextMs": 15000,
+      "tier": "primary",
+      "smoke": true,
+      "tags": ["dialogue", "negation", "frequency"],
+      "checks": [
+        "区分两位说话者对鱼和海鲜的喜好以及在家或外出食用的情况。",
+        "保留不经常、几次、一两次、从不等频率差别，不颠倒否定。"
+      ]
+    },
+    {
+      "id": "food-frequency",
+      "sourceId": "food-manual",
+      "label": "频率解释与举例",
+      "fromMs": 187000,
+      "toMs": 237000,
+      "contextMs": 15000,
+      "tier": "primary",
+      "smoke": false,
+      "tags": ["numbers", "comparison", "conditional-example"],
+      "checks": [
+        "保留一周七次中约五次、两三次和约两次的举例范围。",
+        "区分通常和有时，不能将例子翻成严格统一定义。"
+      ]
+    },
+    {
+      "id": "food-dislike",
+      "sourceId": "food-manual",
+      "label": "强烈否定与口语回应",
+      "fromMs": 237000,
+      "toMs": 270000,
+      "contextMs": 15000,
+      "tier": "primary",
+      "smoke": false,
+      "tags": ["negation", "idiom", "dialogue"],
+      "checks": [
+        "保留从不吃焗豆的明确否定及无法忍受的语气。",
+        "自然表达口语回应，不能将提问者的态度归给回答者。"
+      ]
+    },
+    {
+      "id": "science-defense",
+      "sourceId": "science-manual",
+      "label": "机制因果与术语",
+      "fromMs": 40000,
+      "toMs": 89000,
+      "contextMs": 15000,
+      "tier": "primary",
+      "smoke": true,
+      "tags": ["causality", "terminology", "enumeration"],
+      "checks": [
+        "保留先天反应与适应性免疫之间的关系，区分 B 细胞和 T 细胞。",
+        "症状列举和记录病原体信息的功能不能漏译；再次入侵是条件。"
+      ]
+    },
+    {
+      "id": "science-risk",
+      "sourceId": "science-manual",
+      "label": "多层条件与风险",
+      "fromMs": 89000,
+      "toMs": 129000,
+      "contextMs": 15000,
+      "tier": "primary",
+      "smoke": false,
+      "tags": ["condition", "negation", "modality"],
+      "checks": [
+        "保留建立防御需要时间，以及身体弱或年幼与病原体严重的条件关系。",
+        "可能面临风险不能强化成必然；保留未暴露于完整强度疾病的含义。"
+      ]
+    },
+    {
+      "id": "science-types",
+      "sourceId": "science-manual",
+      "label": "类别比较与限制",
+      "fromMs": 136000,
+      "toMs": 181000,
+      "contextMs": 15000,
+      "tier": "primary",
+      "smoke": false,
+      "tags": ["comparison", "negation", "terminology"],
+      "checks": [
+        "区分减毒与灭活两类疫苗及各自局限，不能互换。",
+        "保留免疫较弱者不能接种前者与后者免疫持久性不足的关系。"
+      ]
+    },
+    {
+      "id": "math-task",
+      "sourceId": "math-manual",
+      "label": "数字范围与任务描述",
+      "fromMs": 49000,
+      "toMs": 101000,
+      "contextMs": 15000,
+      "tier": "primary",
+      "smoke": false,
+      "tags": ["numbers", "idiom", "contrast"],
+      "checks": [
+        "按说话人原文保留像素尺寸及输出范围，不基于常识静默改写原文数字。",
+        "保留任务从容易变困难的对比与本视频和下集的范围区别。"
+      ]
+    },
+    {
+      "id": "math-pixels",
+      "sourceId": "math-manual",
+      "label": "数量与映射关系",
+      "fromMs": 172000,
+      "toMs": 218000,
+      "contextMs": 15000,
+      "tier": "primary",
+      "smoke": false,
+      "tags": ["numbers", "mapping", "terminology"],
+      "checks": [
+        "区分像素尺寸、神经元总数、零到一的灰度值及对应方向。",
+        "activation 译法保持一致，不能将类比译成额外的生物学断言。"
+      ]
+    },
+    {
+      "id": "math-propagation",
+      "sourceId": "math-manual",
+      "label": "逐层因果与指代",
+      "fromMs": 273000,
+      "toMs": 332000,
+      "contextMs": 15000,
+      "tier": "primary",
+      "smoke": false,
+      "tags": ["causality", "reference", "sequence"],
+      "checks": [
+        "保留输入层到后续层再到输出层的传播顺序。",
+        "最后最亮的输出神经元表示网络选择，不等于每一层都直接输出分类。"
+      ]
+    },
+    {
+      "id": "story-childhood",
+      "sourceId": "story-manual",
+      "label": "个人叙事与现实反差",
+      "fromMs": 22000,
+      "toMs": 86000,
+      "contextMs": 15000,
+      "tier": "primary",
+      "smoke": false,
+      "tags": ["narrative", "contrast", "negation"],
+      "checks": [
+        "保留母亲说两岁与讲者认为四岁更接近事实的差别。",
+        "区分书中人物生活和讲者在尼日利亚的现实，不漏掉没有出国及没有雪的否定。"
+      ]
+    },
+    {
+      "id": "story-identity",
+      "sourceId": "story-manual",
+      "label": "观点转变与作家姓名",
+      "fromMs": 104000,
+      "toMs": 157000,
+      "contextMs": 15000,
+      "tier": "primary",
+      "smoke": false,
+      "tags": ["proper-noun", "causality", "narrative"],
+      "checks": [
+        "保留从外国书籍到发现非洲文学的认识转变及因果。",
+        "陌生作家姓名可保留原文，不得臆改为熟悉作家，也不能淡化自我认同。"
+      ]
+    },
+    {
+      "id": "story-fide",
+      "sourceId": "story-manual",
+      "label": "引语与叙事视角",
+      "fromMs": 195000,
+      "toMs": 253000,
+      "contextMs": 15000,
+      "tier": "primary",
+      "smoke": false,
+      "tags": ["quotation", "reference", "contrast"],
+      "checks": [
+        "分清母亲的引语、讲者当时的看法和后来反思，保留 Fide 与其家庭的指代。",
+        "编篮者是兄弟，展示者是母亲；不能将讲者过去的偏见翻成客观事实。"
+      ]
+    },
+    {
+      "id": "science-defense-asr",
+      "sourceId": "science-asr",
+      "label": "机制因果与术语（ASR 对照）",
+      "fromMs": 40000,
+      "toMs": 89000,
+      "contextMs": 15000,
+      "tier": "diagnostic",
+      "smoke": false,
+      "tags": ["causality", "terminology", "enumeration", "asr-noise"],
+      "checks": [
+        "保留先天反应与适应性免疫之间的关系，区分 B 细胞和 T 细胞。",
+        "症状列举和记录病原体信息的功能不能漏译；再次入侵是条件。",
+        "与同时间人工轨分别评估；不得向 ASR 流程输入人工轨或其译文，未听音频前不把差异直接判为 ASR 错误。"
+      ],
+      "pairOf": "science-defense"
+    },
+    {
+      "id": "science-risk-asr",
+      "sourceId": "science-asr",
+      "label": "多层条件与风险（ASR 对照）",
+      "fromMs": 89000,
+      "toMs": 129000,
+      "contextMs": 15000,
+      "tier": "diagnostic",
+      "smoke": false,
+      "tags": ["condition", "negation", "modality", "asr-noise"],
+      "checks": [
+        "保留建立防御需要时间，以及身体弱或年幼与病原体严重的条件关系。",
+        "可能面临风险不能强化成必然；保留未暴露于完整强度疾病的含义。",
+        "与同时间人工轨分别评估；不得向 ASR 流程输入人工轨或其译文，未听音频前不把差异直接判为 ASR 错误。"
+      ],
+      "pairOf": "science-risk"
+    },
+    {
+      "id": "science-types-asr",
+      "sourceId": "science-asr",
+      "label": "类别比较与限制（ASR 对照）",
+      "fromMs": 136000,
+      "toMs": 181000,
+      "contextMs": 15000,
+      "tier": "diagnostic",
+      "smoke": false,
+      "tags": ["comparison", "negation", "terminology", "asr-noise"],
+      "checks": [
+        "区分减毒与灭活两类疫苗及各自局限，不能互换。",
+        "保留免疫较弱者不能接种前者与后者免疫持久性不足的关系。",
+        "与同时间人工轨分别评估；不得向 ASR 流程输入人工轨或其译文，未听音频前不把差异直接判为 ASR 错误。"
+      ],
+      "pairOf": "science-types"
+    }
+  ]
+}
