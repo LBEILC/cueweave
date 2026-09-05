@@ -4,6 +4,13 @@ import { parseArgs } from 'node:util';
 import type { DisplayCue, SourceToken } from '@cueweave/core/subtitle';
 import { hash, PROJECT_ROOT, writeJson } from './eval/io';
 import { writeFile } from 'node:fs/promises';
+import {
+  TRANSLATION_RUBRIC,
+  TRANSLATION_RUBRIC_HASH,
+  scoreTranslation,
+  aggregateScores,
+  type ScoreCard,
+} from './eval/translation-scoring';
 
 interface Reference {
   id: string;
@@ -17,7 +24,8 @@ interface Reference {
 interface Judgment {
   id: string;
   meaningVerdicts: Array<'pass' | 'partial' | 'fail' | 'unavailable' | 'context-only'>;
-  fluency: number;
+  fluency?: number;
+  scoreCard?: ScoreCard;
   verdict: 'usable' | 'needs-polish' | 'needs-fix' | 'incomplete';
   notes: string;
   issues: Array<{
@@ -33,10 +41,15 @@ interface SummaryRow {
   tier: string;
   videoId: string;
   status: string;
+  inputSha256: string;
+  durationMs: number;
+  firstUsableMs: number | null;
   verdict: Judgment['verdict'];
   meaningTally: Record<Judgment['meaningVerdicts'][number], number>;
   possible: number;
-  fluency: number;
+  fluency: number | null;
+  score?: ReturnType<typeof scoreTranslation>;
+  scoreCard?: ScoreCard;
   scoredCues: number;
   fullyScoredCues: number;
   displayWarningCues: number;
@@ -74,13 +87,29 @@ async function main(): Promise<void> {
     runResultSha256: string;
     referenceSha256: string;
     reviewer: string;
+    reviewerType?: 'human' | 'agent' | 'mixed';
+    rubricVersion?: string;
+    rubricSha256?: string;
+    reviewStatus?: string;
     cases: Judgment[];
   };
+  const scoredReview = review.rubricVersion !== undefined;
+  if (
+    scoredReview &&
+    (review.rubricVersion !== TRANSLATION_RUBRIC.version ||
+      review.rubricSha256 !== TRANSLATION_RUBRIC_HASH ||
+      review.reviewStatus !== 'complete' ||
+      !['human', 'agent', 'mixed'].includes(review.reviewerType ?? ''))
+  )
+    throw new Error('评分标准不匹配、评审尚未完成或缺少评审来源');
+  if (typeof review.reviewer !== 'string' || !review.reviewer.trim()) throw new Error('缺少评审者');
+  if (!scoredReview && review.cases.some((c) => c.scoreCard !== undefined))
+    throw new Error('scoreCard 必须声明评分标准及其哈希');
   const runText = await readFile(path.join(directory, 'result.json'), 'utf8');
   const run = JSON.parse(runText) as {
     fingerprint: string;
     status: string;
-    identity: { model: string; entrypoint: string };
+    identity: { model: string; entrypoint: string; mode?: string; [key: string]: unknown };
     selected: Array<{ id: string; split: string; tier: string }>;
     results: Record<
       string,
@@ -90,6 +119,7 @@ async function main(): Promise<void> {
         cues: DisplayCue[];
         missingScoreTokens: string[];
         durationMs: number;
+        firstUsableMs?: number;
         attempts: Array<{ status: string; stages: string[]; error?: string }>;
       }>
     >;
@@ -135,10 +165,13 @@ async function main(): Promise<void> {
       throw new Error(`输入指纹不一致：${item.id}`);
     if (
       judgment.meaningVerdicts.length !== ref.meaningUnits.length ||
-      judgment.meaningVerdicts.some((v) => !(v in label))
+      judgment.meaningVerdicts.some((v) => !Object.hasOwn(label, v))
     )
       throw new Error(`语义要点评审数量或枚举错误：${item.id}`);
-    if (!Number.isInteger(judgment.fluency) || judgment.fluency < 1 || judgment.fluency > 5)
+    if (
+      !scoredReview &&
+      (!Number.isInteger(judgment.fluency) || judgment.fluency! < 1 || judgment.fluency! > 5)
+    )
       throw new Error('流畅度必须为 1–5 分');
     const input = JSON.parse(inputText) as {
       videoId: string;
@@ -146,6 +179,29 @@ async function main(): Promise<void> {
       tokens: SourceToken[];
       scoreTokenIds: string[];
     };
+    const score = scoredReview
+      ? scoreTranslation(judgment.scoreCard!, input, result.cues)
+      : undefined;
+    if (
+      score &&
+      (score.missingTokenIds.length !== result.missingScoreTokens.length ||
+        score.missingTokenIds.some((id) => !result.missingScoreTokens.includes(id)))
+    )
+      throw new Error('运行记录的缺失范围与实际输出不符');
+    const fluency = score
+      ? judgment.scoreCard!.ratings.fluency.level === null
+        ? null
+        : judgment.scoreCard!.ratings.fluency.level! + 1
+      : judgment.fluency!;
+    const verdict = score
+      ? score.gate === 'incomplete'
+        ? 'incomplete'
+        : score.gate === 'needs-fix'
+          ? 'needs-fix'
+          : score.gate === 'needs-improvement'
+            ? 'needs-polish'
+            : 'usable'
+      : judgment.verdict;
     const scored = new Set(input.scoreTokenIds);
     const cues = result.cues
       .map((cue, index) => ({ cue, index }))
@@ -165,8 +221,19 @@ async function main(): Promise<void> {
     const tally = { pass: 0, partial: 0, fail: 0, unavailable: 0, 'context-only': 0 };
     judgment.meaningVerdicts.forEach((v) => tally[v]++);
     const possible = ref.meaningUnits.length - tally['context-only'];
-    if (result.status !== 'success' && judgment.verdict !== 'incomplete')
+    if (!scoredReview && result.status !== 'success' && verdict !== 'incomplete')
       throw new Error('不完整输出不能标记可用');
+    if (score && (!possible || (tally['context-only'] > 0 && !judgment.notes.trim())))
+      throw new Error('计分要点不能为空；排除边界要点必须说明原因');
+    if (
+      score &&
+      (tally.fail || tally.partial) &&
+      judgment.scoreCard!.ratings.accuracy.level === 4 &&
+      judgment.scoreCard!.ratings.completeness.level === 4
+    )
+      throw new Error('语义要点存在错漏，准确性与完整性不能同时满分');
+    if (score && tally.unavailable && !score.missingTokenIds.length)
+      throw new Error('未产出要点与计分范围完整产出矛盾');
     for (const issue of judgment.issues)
       if (
         issue.cueIndices.some((i) => !Number.isSafeInteger(i) || i < 0 || i >= result.cues.length)
@@ -178,10 +245,14 @@ async function main(): Promise<void> {
       tier: item.tier,
       videoId: input.videoId,
       status: result.status,
-      verdict: judgment.verdict,
+      inputSha256: ref.inputSha256,
+      durationMs: result.durationMs,
+      firstUsableMs: result.firstUsableMs ?? null,
+      verdict,
       meaningTally: tally,
       possible,
-      fluency: judgment.fluency,
+      fluency,
+      ...(score ? { score, scoreCard: judgment.scoreCard } : {}),
       scoredCues: cues.length,
       fullyScoredCues: fullyScored.length,
       displayWarningCues: warnings.length,
@@ -191,10 +262,26 @@ async function main(): Promise<void> {
     sections.push(
       `## ${item.id} · ${ref.label}`,
       '',
-      `结论：${verdictLabel[judgment.verdict]}。参考语义要点 ${tally.pass}/${possible} 完整保留，${tally.partial} 项部分保留，${tally.fail} 项错误/遗漏，${tally.unavailable} 项因未产出无法评价；已有译文流畅度 ${judgment.fluency}/5。`,
+      `结论：${verdictLabel[verdict]}。参考语义要点 ${tally.pass}/${possible} 完整保留，${tally.partial} 项部分保留，${tally.fail} 项错误/遗漏，${tally.unavailable} 项因未产出无法评价；已有译文流畅度 ${fluency === null ? '不可评' : `${fluency}/5`}。`,
       '',
       judgment.notes,
       '',
+      ...(score
+        ? [
+            `评分：${score.total === null ? '不完整，不给总分' : `${score.total.toFixed(2)}/100`}；门槛：${score.gate}；critical ${score.critical} / major ${score.major} / minor ${score.minor}。`,
+            '',
+            ...Object.entries(judgment.scoreCard!.ratings).map(
+              ([dimension, rating]) =>
+                `- ${dimension}：${rating.level ?? '不可评'}/4；${rating.rationale}；证据 ${rating.issueIds.join(', ') || '未发现问题'}`,
+            ),
+            '',
+            ...judgment.scoreCard!.issues.map(
+              (issue) =>
+                `- **${issue.id} / ${issue.severity} / ${issue.dimensions.join(', ')}**：原文「${issue.sourceQuote}」→译文「${issue.translationQuote || '未产出'}」（字幕 ${issue.cueIndices.join(', ')}）；${issue.explanation}`,
+            ),
+            '',
+          ]
+        : []),
       '### 参考译文',
       '',
       ref.referenceTranslation,
@@ -249,12 +336,31 @@ async function main(): Promise<void> {
     fullyScoredCues: items.reduce((s, r) => s + r.fullyScoredCues, 0),
   });
   const summary = {
+    ...(scoredReview
+      ? {
+          rubric: TRANSLATION_RUBRIC,
+          rubricSha256: TRANSLATION_RUBRIC_HASH,
+          reviewerType: review.reviewerType,
+          quality: Object.fromEntries(
+            Object.entries({
+              primary,
+              development: primary.filter((r) => r.split === 'development'),
+              holdout: primary.filter((r) => r.split === 'holdout'),
+              diagnostic: rows.filter((r) => r.tier === 'diagnostic'),
+            }).map(([name, items]) => [
+              name,
+              aggregateScores(items.map((r) => ({ videoId: r.videoId, score: r.score! }))),
+            ]),
+          ),
+        }
+      : { quality: null, scoringStatus: 'legacy-unscored' }),
     referenceSha256: hash(refText),
     judgmentsSha256: hash(judgmentsText),
     reviewer: review.reviewer,
     runFingerprint: run.fingerprint,
     runResultSha256: hash(runText),
     runSummary,
+    runIdentity: run.identity,
     primary: sum(primary),
     development: sum(primary.filter((r) => r.split === 'development')),
     holdout: sum(primary.filter((r) => r.split === 'holdout')),
@@ -266,7 +372,20 @@ async function main(): Promise<void> {
     '',
     `模型：${run.identity.model}。实际入口：${run.identity.entrypoint}。参考版本：${refs.version}。`,
     '',
-    '参考译文由助手先行冻结，本报告也是助手逐条评审，未经过独立人工复核。原文是最终依据；不是逐字相似度评分，也不是通用准确率。计分边界外的补全不额外要求。',
+    `参考译文由助手先行冻结；本次评审者：${review.reviewer}，来源：${review.reviewerType ?? '历史未声明'}。原文是最终依据；不是逐字相似度评分，也不是通用准确率。计分边界外的补全不额外要求。`,
+    '',
+    ...(scoredReview
+      ? [
+          `评分标准：${TRANSLATION_RUBRIC.version}（待人工校准）。先按视频内片段平均，再对视频等权平均；任何片段不完整则该组不给总分。严重问题不因平均分被抹去。`,
+          '',
+          '| 范围 | 视频宏平均 /100 | 不完整片段 | 需修复片段 | critical / major / minor |',
+          '| --- | ---: | ---: | ---: | --- |',
+          ...Object.entries(summary.quality!).map(
+            ([name, group]) =>
+              `| ${name} | ${group.total === null ? '不可给分' : group.total.toFixed(2)} | ${group.incompleteCases} | ${group.needsFixCases} | ${group.critical} / ${group.major} / ${group.minor} |`,
+          ),
+        ]
+      : ['历史评审未按新标准评分，不生成百分制总分。']),
     '',
     '这是一次运行的快照。候选原始响应与最终交付不同：表格评最终交付，数字校验误拦截等原因另行说明。流畅度只评价已有译文，不抵消未产出或关键错误。',
     '',
@@ -276,7 +395,7 @@ async function main(): Promise<void> {
     '| --- | --- | --- | --- | --- |',
     ...rows.map(
       (r) =>
-        `| ${r.id} | ${r.split}/${r.tier} | ${verdictLabel[r.verdict]} | ${r.meaningTally.pass}/${r.possible} | ${r.fluency}/5 |`,
+        `| ${r.id} | ${r.split}/${r.tier} | ${verdictLabel[r.verdict]} | ${r.meaningTally.pass}/${r.possible} | ${r.fluency === null ? '不可评' : `${r.fluency}/5`} |`,
     ),
     '',
     '主集与 ASR 诊断集分别汇总，避免同内容重复计权。切片计数及每段语义要点数量不同，不能直接将汇总比例视为跨领域模型准确率。',

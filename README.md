@@ -26,6 +26,7 @@ CueWeave 是由浏览器扩展、桌面应用与共享翻译核心组成的字�
 - [系统架构](docs/ARCHITECTURE.md)：模块边界、数据流、安全和降级策略。
 - [本地开发](docs/DEVELOPMENT.md)：安装依赖、验证、构建和加载扩展。
 - [桌面端开发规格](docs/DESKTOP.md)：Electron 播放器、ASR、项目保存与字幕工作流的实现要求。
+- [翻译质量评分](docs/TRANSLATION-SCORING.md)：统一评分标准、证据、严重错误门槛与匿名评审工具。
 - [字幕评测](docs/EVALUATION.md)：脱离播放器运行翻译、保存诊断记录、比较模型与提示词。
 - [开发路线图](docs/ROADMAP.md)：分阶段交付顺序与完成条件。
 - [上游审计](docs/UPSTREAM_AUDIT.md)：开源基础的许可证、结构和采用决策。
