@@ -8,10 +8,11 @@ import {
 } from '../domain/subtitle/ai';
 
 import { buildFirstPassPrompt, buildRevisionPrompt } from './subtitlePrompt';
+import { applySubtitleReview, REVISION_SCHEMA } from './subtitleReview';
 import { joinableSubtitleBoundary, subtitleRevisionReasons } from './subtitleRisk';
 export { buildFirstPassPrompt } from './subtitlePrompt';
 
-export const FIRST_PASS_VERSION = 'first-pass-v4';
+export const FIRST_PASS_VERSION = 'first-pass-v5';
 export type SubtitleJsonRequest = (
   stage: string,
   prompt: string,
@@ -384,29 +385,10 @@ export async function translateFirstPass(
         await request(
           policy.review === 'always' ? 'quality-revision' : 'risk-revision',
           buildRevisionPrompt(context, neighbors, units, reasons),
-          REPAIR_SCHEMA,
+          REVISION_SCHEMA,
         ),
       );
-      if (
-        !record(output) ||
-        !Array.isArray(output.translations) ||
-        output.translations.length !== units.length
-      )
-        throw new Error('对照修订必须返回所有固定 ID。');
-      const translations = new Map<number, string>();
-      for (const item of output.translations) {
-        if (
-          !record(item) ||
-          !Number.isSafeInteger(item.id) ||
-          (item.id as number) < 0 ||
-          (item.id as number) >= units.length ||
-          typeof item.translation !== 'string' ||
-          !item.translation.trim() ||
-          translations.has(item.id as number)
-        )
-          throw new Error('对照修订包含未知、重复或空 ID。');
-        translations.set(item.id as number, item.translation);
-      }
+      const translations = applySubtitleReview(output, units);
       const revised = inspect(
         JSON.stringify({
           units: candidate.units.map((unit, id) => ({

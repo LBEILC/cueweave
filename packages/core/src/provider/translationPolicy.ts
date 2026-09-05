@@ -1,6 +1,6 @@
 /** All modes share output validation; review effort is explicit and bounded. */
 export type TranslationMode = 'speed' | 'balanced' | 'quality';
-export const TRANSLATION_POLICY_VERSION = 'playback-policy-v3';
+export const TRANSLATION_POLICY_VERSION = 'playback-policy-v4';
 export function translationPolicy(mode: TranslationMode = 'balanced') {
   const common = { mode, recoveryCalls: 2, transientRetries: 1, revisionTimeoutMs: 12000 };
   if (mode === 'speed')

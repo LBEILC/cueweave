@@ -34,7 +34,14 @@ describe('bounded source-grounded revision', () => {
       )
       .mockResolvedValueOnce(
         JSON.stringify({
-          translations: [{ id: 0, translation: '如果你还没吃饭请等待' }],
+          edits: [
+            {
+              id: 0,
+              sourceQuote: 'not eaten',
+              problem: '否定被翻为肯定',
+              translation: '如果你还没吃饭请等待',
+            },
+          ],
         }),
       );
     const result = await translateFirstPass(
@@ -110,7 +117,14 @@ describe('bounded source-grounded revision', () => {
       .mockResolvedValueOnce(initial)
       .mockResolvedValueOnce(
         JSON.stringify({
-          translations: [{ id: 0, translation: '了解如何抵御疾病' }],
+          edits: [
+            {
+              id: 0,
+              sourceQuote: 'Understand defenses against illness',
+              problem: '草稿重复表达',
+              translation: '了解如何抵御疾病',
+            },
+          ],
         }),
       );
     const result = await translateFirstPass(
