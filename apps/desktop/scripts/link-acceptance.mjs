@@ -99,7 +99,15 @@ async function check(name, url, expectedTitle) {
     ...(executable ? { executablePath: executable } : {}),
     args: executable
       ? ['--hidden', '--link-check', '--mute-audio']
-      : [desktopDirectory, '--hidden', '--link-check', '--mute-audio'],
+      : [
+          desktopDirectory,
+          '--hidden',
+          '--link-check',
+          '--mute-audio',
+          ...(process.env.CUEWEAVE_TEST_DISABLE_GPU_SANDBOX === '1'
+            ? ['--disable-gpu-sandbox']
+            : []),
+        ],
     env,
     timeout: 30_000,
   });
@@ -141,7 +149,15 @@ async function checkCancelAndResume() {
     ...(executable ? { executablePath: executable } : {}),
     args: executable
       ? ['--hidden', '--link-check', '--mute-audio']
-      : [desktopDirectory, '--hidden', '--link-check', '--mute-audio'],
+      : [
+          desktopDirectory,
+          '--hidden',
+          '--link-check',
+          '--mute-audio',
+          ...(process.env.CUEWEAVE_TEST_DISABLE_GPU_SANDBOX === '1'
+            ? ['--disable-gpu-sandbox']
+            : []),
+        ],
     env,
     timeout: 30_000,
   });
@@ -183,7 +199,15 @@ async function checkYoutubeStreaming() {
     ...(executable ? { executablePath: executable } : {}),
     args: executable
       ? ['--hidden', '--link-check', '--mute-audio']
-      : [desktopDirectory, '--hidden', '--link-check', '--mute-audio'],
+      : [
+          desktopDirectory,
+          '--hidden',
+          '--link-check',
+          '--mute-audio',
+          ...(process.env.CUEWEAVE_TEST_DISABLE_GPU_SANDBOX === '1'
+            ? ['--disable-gpu-sandbox']
+            : []),
+        ],
     env,
     timeout: 30_000,
   });
@@ -200,15 +224,13 @@ async function checkYoutubeStreaming() {
     const qualityOptions = await page.getByLabel('清晰度').locator('option').allTextContents();
     assert.ok(qualityOptions.some((label) => label.includes('240p')));
     assert.ok(qualityOptions.some((label) => label.includes('144p')));
-    await page.getByRole('button', { name: '字幕', exact: true }).click();
-    const subtitleOptions = await page.getByLabel('在线字幕').locator('option').allTextContents();
-    assert.ok(subtitleOptions.includes('English（人工）'));
-    assert.ok(subtitleOptions.includes('en（自动）'));
-    await page.getByLabel('在线字幕').selectOption({ label: 'English（人工）' });
-    await page.locator('.subtitle-overlay').waitFor();
-    await page.locator('.subtitle-source-options > summary').click();
-    await page.getByLabel('在线字幕').selectOption({ label: 'en（自动）' });
-    await page.locator('.subtitle-overlay').waitFor({ state: 'hidden' });
+    await page.getByRole('region', { name: '边看边译' }).waitFor();
+    assert.equal(await page.getByLabel('在线字幕', { exact: true }).count(), 0);
+    await page.locator('.subtitle-list .subtitle-row').first().waitFor();
+    await page.locator('video').evaluate((video) => {
+      video.currentTime = 1;
+      void video.play();
+    });
     await page.locator('.subtitle-overlay').waitFor();
     await page.waitForTimeout(8_000);
     await waitForPlayer(page, 10);
@@ -249,7 +271,7 @@ async function checkYoutubeStreaming() {
       durationSeconds: 19,
       playerState: videoState,
       qualityOptions,
-      subtitleOptions,
+      sourceSubtitle: await page.locator('.subtitle-source-options summary').innerText(),
       mediaDiagnostics,
     };
   } finally {
@@ -269,7 +291,15 @@ async function checkYoutubeHighResolution() {
     ...(executable ? { executablePath: executable } : {}),
     args: executable
       ? ['--hidden', '--link-check', '--mute-audio']
-      : [desktopDirectory, '--hidden', '--link-check', '--mute-audio'],
+      : [
+          desktopDirectory,
+          '--hidden',
+          '--link-check',
+          '--mute-audio',
+          ...(process.env.CUEWEAVE_TEST_DISABLE_GPU_SANDBOX === '1'
+            ? ['--disable-gpu-sandbox']
+            : []),
+        ],
     env,
     timeout: 30_000,
   });
@@ -320,7 +350,15 @@ async function checkBilibiliStreaming() {
     ...(executable ? { executablePath: executable } : {}),
     args: executable
       ? ['--hidden', '--link-check', '--mute-audio']
-      : [desktopDirectory, '--hidden', '--link-check', '--mute-audio'],
+      : [
+          desktopDirectory,
+          '--hidden',
+          '--link-check',
+          '--mute-audio',
+          ...(process.env.CUEWEAVE_TEST_DISABLE_GPU_SANDBOX === '1'
+            ? ['--disable-gpu-sandbox']
+            : []),
+        ],
     env,
     timeout: 30_000,
   });

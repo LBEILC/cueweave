@@ -1,4 +1,5 @@
 import type Database from 'better-sqlite3';
+import { CUE_TRANSLATION_VERSION } from '@cueweave/core/provider/cueTypes';
 import { createHash, randomUUID } from 'node:crypto';
 import type { ProjectCue } from '../shared/project';
 import type { ProviderConfig } from '../shared/settings';
@@ -9,7 +10,7 @@ import {
   type TranslationState,
 } from '../shared/translation';
 
-export const TRANSLATION_PIPELINE = 'preserve-cue-v1';
+export const TRANSLATION_PIPELINE = CUE_TRANSLATION_VERSION;
 export function sourceIdentity(cues: readonly ProjectCue[]) {
   return createHash('sha256').update(JSON.stringify(cues)).digest('hex');
 }

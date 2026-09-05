@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer, webUtils } from 'electron';
 import { DESKTOP_CHANNELS, desktopError } from '../shared/bridge';
 import type { ProjectReply } from '../shared/project';
 import type { SettingsReply } from '../shared/settings';
+import type { OnlineSubtitleSource, OnlineTranslationSnapshot } from '../shared/online-translation';
 import type {
   AppInfo,
   DesktopBridge,
@@ -16,6 +17,12 @@ import type {
 } from '../shared/bridge';
 
 const bridge: DesktopBridge = {
+  onlineTranslation: (command) =>
+    (
+      ipcRenderer.invoke(DESKTOP_CHANNELS.onlineTranslation, command) as Promise<
+        DesktopResult<OnlineTranslationSnapshot>
+      >
+    ).catch(() => desktopError('UNAVAILABLE')),
   settingsCommand: (command) =>
     (
       ipcRenderer.invoke(DESKTOP_CHANNELS.settings, command) as Promise<
@@ -86,7 +93,7 @@ const bridge: DesktopBridge = {
   loadOnlineSubtitle: (id: string) =>
     (
       ipcRenderer.invoke(DESKTOP_CHANNELS.onlineSubtitleLoad, { id }) as Promise<
-        DesktopResult<{ name: string; content: string }>
+        DesktopResult<OnlineSubtitleSource>
       >
     ).catch(() => desktopError('UNAVAILABLE')),
   pickPlayerSubtitle: () =>

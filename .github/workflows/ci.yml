@@ -83,6 +83,9 @@ jobs:
       - name: Verify subtitle translation
         run: npm run test:desktop:translation
 
+      - name: Verify online subtitle translation
+        run: npm run test:desktop:online
+
       - name: Verify unpacked application
         if: github.event_name == 'workflow_dispatch' && inputs.build_installer
         run: npm run test:desktop:d0

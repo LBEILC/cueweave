@@ -356,6 +356,17 @@ D1 沿用既有品牌、字体和图标，没有新增位图资产。此前的�
 
 D2 保留既有 Warm Paper、MiSans 与 Phosphor，没有新增通用颜色令牌或位图资产。独立通用代理完成视觉／代码终审，12 张当前截图全部审阅，处置为 SHIP，无实质发现；截图位于忽略目录 `.impeccable/review/desktop-translation/`。展开的翻译入口与导出控件通过代码及 D2 文档核对，不属于截图覆盖。模拟 API 的功能验收单独记录在 D2 文档，不证明真实模型质量；该结论也不替代安装器验收。
 
+### Desktop online: watch-time translation
+
+本次精修依据 [OnlineTranslationTools](apps/desktop/src/renderer/src/components/OnlineTranslationTools.tsx)、[在线翻译状态](apps/desktop/src/renderer/src/use-online-translation.ts)、App 与桌面样式，沿用已确认 A 方案、Warm Paper、MiSans 和 Phosphor，不新增视觉方向、通用令牌或位图资产。
+
+- **原文来源**：打开在线媒体后自动读取选定的原文字幕，优先英语自动字幕；来源区只呈现一条原文来源摘要，不展示平台翻译语言列表。载入失败时可重新读取，也保留加载本地字幕文件的入口。
+- **边看边译**：侧栏依次呈现标题与开启／暂停／继续操作、目标语言、当前位置翻译状态与已完成／总条数、缓存说明和 AI 设置入口。连接或运行时禁用目标语言修改；载入原文、无可用字幕和连接期间禁用翻译操作。状态使用 `role="status"`，失败信息就地使用 `role="alert"`。首次开启前说明字幕发送到已配置 AI 服务及可能产生 API 费用；有会话后说明回看复用缓存，暂停时已有译文仍可观看。进入 AI 设置暂停媒体。
+- **尺寸与低高度适配**：在线工具区内边距 12px 16px，以既有边线分区；标题 13px / 600，语言标签、状态、帮助与错误 12px，状态和帮助行高 1.6。窗口内容高度不超过 650px 时，在线侧栏整体纵向滚动、直接子项不收缩；标题与关闭按钮以 `position: sticky; top: 0; z-index: 2` 保持可见，背景为既有 `--surface`。内层字幕列表高 240px，保留自身滚动；播放控制仍在侧栏之外固定可见。
+- **双语阅读**：在线译文呈现在对应原文下，播放器继续共用 `SubtitleOverlay` 与已保存显示偏好；没有当前译文时保留原文回退，不另建一套在线字幕样式。
+
+独立代理对本次在线界面完成视觉／代码终审，处置为 SHIP，无实质发现。截图范围限于 `.impeccable/review/desktop-online/` 下的 `online-light`、`online-dark`、`online-narrow-light`、`online-narrow-dark`、`online-narrow-list-light`、`online-narrow-list-dark`、`online-error-light` 七张 PNG；该结论不扩大到真实模型质量、后台调度或安装器验收。
+
 结构原型与本机截图留在被忽略的 `.impeccable/review/desktop-redesign/` 和 `.impeccable/review/desktop-smoke/`；测试视频与长字幕均为确定性生成样本，不作为产品默认内容。运行验证见桌面工作区 README。
 
 ## Do's and Don'ts

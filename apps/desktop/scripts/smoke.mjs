@@ -144,6 +144,7 @@ async function check(mode, rendererUrl) {
         'inspectLink',
         'loadOnlineSubtitle',
         'onLinkImportEvent',
+        'onlineTranslation',
         'openFontLicense',
         'openSiteLogin',
         'pickMedia',

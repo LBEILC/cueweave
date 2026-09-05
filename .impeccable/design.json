@@ -647,7 +647,8 @@
       },
       {
         "name": "desktop-focused-editor-height",
-        "value": "650px"
+        "value": "650px",
+        "purpose": "max-height: 编辑器接管侧栏；在线翻译侧栏整体滚动，标题与关闭按钮 sticky，内层字幕列表高 240px 并独立滚动。"
       }
     ]
   },

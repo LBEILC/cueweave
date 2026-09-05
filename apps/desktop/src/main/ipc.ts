@@ -18,6 +18,12 @@ import type { MediaRegistry } from './media';
 import { ServiceHostError } from './service-host';
 import type { DesktopServiceHost } from './service-host';
 import type { SiteAuthManager } from './site-auth';
+import type { SettingsStore } from './settings-store';
+import type { OnlineTranslator } from './online-translator';
+import { validOnlineTranslationCommand } from '../shared/online-translation';
+import { parseImportedSubtitles } from '../services/subtitle-import';
+import type { TranslationCue } from '@cueweave/core/provider/cueTranslation';
+import { normalizeRollingCues } from '@cueweave/core/provider/rollingCues';
 
 export function registerAppIpc(options: {
   window: BrowserWindow;
@@ -27,7 +33,11 @@ export function registerAppIpc(options: {
   media: MediaRegistry;
   service: DesktopServiceHost;
   auth: SiteAuthManager;
+  settings?: SettingsStore;
+  translator?: OnlineTranslator;
 }): () => void {
+  const loadedSubtitles = new Map<string, TranslationCue[]>();
+  let subtitleGeneration = 0;
   const linkJobs = new Map<string, AbortController>();
   const onlineSubtitles = new Map<
     string,
@@ -195,7 +205,8 @@ export function registerAppIpc(options: {
       const { resolvedUrl, resolvedMime, resolvedVariants, resolvedSubtitles, ...preview } =
         inspected;
       let playback: LinkPlayback | null = null;
-      onlineSubtitles.clear();
+      // Keep the currently playing track authorized while another link is previewed.
+      if (onlineSubtitles.size > 100) onlineSubtitles.clear();
       if (preview.kind === 'direct') {
         const stream = options.media.registerRemote({
           url: resolvedUrl ?? preview.url,
@@ -282,19 +293,76 @@ export function registerAppIpc(options: {
     if (typeof id !== 'string') return id;
     const subtitle = onlineSubtitles.get(id);
     if (!subtitle) return desktopError('NOT_FOUND');
+    const generation = ++subtitleGeneration;
     try {
       const { authMode, ...request } = subtitle;
-      return {
-        ok: true,
-        value: await options.auth.withCookieFile(request.url, authMode === 'app', (cookieFile) =>
+      const value = await options.auth.withCookieFile(
+        request.url,
+        authMode === 'app',
+        (cookieFile) =>
           options.service.fetchSubtitle({
             ...request,
             ...(cookieFile ? { cookieFile } : {}),
           }),
-        ),
-      };
+      );
+      if (generation !== subtitleGeneration) return desktopError('CANCELLED');
+      const parsed = parseImportedSubtitles(
+        new TextEncoder().encode(value.content),
+        604800000,
+      ).cues;
+      const cues = subtitle.kind === 'automatic' ? normalizeRollingCues(parsed) : parsed;
+      const sourceId = randomUUID();
+      loadedSubtitles.clear();
+      loadedSubtitles.set(sourceId, cues);
+      options.translator?.dispose();
+      return { ok: true, value: { ...value, sourceId, cues } };
     } catch (error) {
       return desktopError(serviceErrorCode(error));
+    }
+  });
+  ipcMain.handle(DESKTOP_CHANNELS.onlineTranslation, async (event, request: unknown) => {
+    const rejected = guardSender(event);
+    if (rejected) return rejected;
+    if (!validOnlineTranslationCommand(request)) return desktopError('INVALID_REQUEST');
+    const cues = loadedSubtitles.get(request.sourceId);
+    if (!cues) return desktopError('FORBIDDEN');
+    const translator = options.translator;
+    if (!translator) return desktopError('UNAVAILABLE');
+    try {
+      if (request.action === 'start') {
+        const saved = options.settings?.snapshot();
+        const apiKey = options.settings?.key();
+        if (!saved?.provider.baseUrl || !saved.provider.model || !apiKey)
+          return {
+            ok: false,
+            error: {
+              code: 'SETTINGS_ERROR',
+              message: '请先在设置中填写并保存 AI 服务、模型和 API Key。',
+            },
+          };
+        return {
+          ok: true,
+          value: await translator.start(
+            request.sourceId,
+            cues,
+            { ...saved.provider, apiKey },
+            request.targetLanguage,
+            request.positionMs,
+          ),
+        };
+      }
+      return {
+        ok: true,
+        value:
+          request.action === 'stop'
+            ? translator.stop(request.sourceId)
+            : translator.tick(request.sourceId, request.positionMs),
+      };
+    } catch {
+      return {
+        ok: false,
+        error: { code: 'UNAVAILABLE', message: '翻译会话未能继续，请检查 AI 设置后重新开启翻译。' },
+      };
     }
   });
   ipcMain.handle(DESKTOP_CHANNELS.linkImportCancel, (event, request: unknown) => {
@@ -357,6 +425,10 @@ export function registerAppIpc(options: {
     }
   });
   return () => {
+    subtitleGeneration++;
+    options.translator?.dispose();
+    loadedSubtitles.clear();
+    ipcMain.removeHandler(DESKTOP_CHANNELS.onlineTranslation);
     for (const controller of linkJobs.values()) controller.abort();
     linkJobs.clear();
     onlineSubtitles.clear();

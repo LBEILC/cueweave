@@ -1,3 +1,6 @@
+import { useOnlineTranslation } from './use-online-translation';
+import { OnlineTranslationTools } from './components/OnlineTranslationTools';
+import type { OnlineSubtitleSource } from '../../shared/online-translation';
 import { SelectControl } from './components/SelectControl';
 import {
   ArrowsOutIcon,
@@ -85,7 +88,12 @@ export function App() {
   const [fullscreen, setFullscreen] = useState(false);
   const [subtitleCues, setSubtitleCues] = useState<SubtitleCue[]>([]);
   const [selectedVariantId, setSelectedVariantId] = useState('');
-  const [selectedOnlineSubtitleId, setSelectedOnlineSubtitleId] = useState('');
+  const [onlineSource, setOnlineSource] = useState<OnlineSubtitleSource | null>(null);
+  const subtitleLoadGeneration = useRef(0);
+  const onlineTranslation = useOnlineTranslation(
+    onlineSource,
+    player.positionSeconds - player.subtitleDelaySeconds,
+  );
   const [onlineSubtitleLoading, setOnlineSubtitleLoading] = useState(false);
   const aboutButtonRef = useRef<HTMLButtonElement>(null);
   const subtitleButtonRef = useRef<HTMLButtonElement>(null);
@@ -121,8 +129,15 @@ export function App() {
             translation: project.translation?.cues[cue.id],
             manual: project.translation?.manualCueIds.includes(cue.id),
           }))
-        : subtitleCues,
-    [project?.cues, project?.translation, subtitleCues],
+        : onlineSource
+          ? onlineSource.cues.map((cue) => ({
+              start: cue.startMs / 1000,
+              end: cue.endMs / 1000,
+              text: cue.text,
+              translation: onlineTranslation.snapshot?.translations[cue.id],
+            }))
+          : subtitleCues,
+    [project?.cues, project?.translation, subtitleCues, onlineSource, onlineTranslation.snapshot],
   );
   const editingCue = project?.cues.find((cue) => cue.id === editingCueId);
   const lastCheckpointRef = useRef(0);
@@ -208,7 +223,7 @@ export function App() {
     if (resuming) setPlayer((current) => ({ ...current, phase: 'loading' }));
     else {
       setSubtitleCues([]);
-      setSelectedOnlineSubtitleId('');
+      setOnlineSource(null);
       setRate('1');
       setPlayer({ ...idlePlayer, phase: 'loading' });
     }
@@ -414,7 +429,7 @@ export function App() {
     projects.detach();
     setProbe(null);
     setSelectedVariantId(linkPreview.playback.defaultVariantId);
-    setSelectedOnlineSubtitleId('');
+    setOnlineSource(null);
     setSubtitleCues([]);
     setImportOpen(false);
     setOnlinePlayback(linkPreview);
@@ -532,45 +547,42 @@ export function App() {
     setSelectedVariantId(id);
   }
 
+  useEffect(() => {
+    subtitleLoadGeneration.current++;
+    setOnlineSource(null);
+    setOnlineSubtitleLoading(false);
+    const track = onlinePlayback?.playback?.subtitles[0];
+    if (track) void loadOnlineSubtitle(track.id);
+    return () => {
+      subtitleLoadGeneration.current++;
+    };
+  }, [onlinePlayback]);
+
   async function loadOnlineSubtitle(id: string) {
-    setSelectedOnlineSubtitleId(id);
-    if (!id) {
-      setSubtitleCues([]);
-      setPlayer((current) => {
-        const next = { ...current };
-        delete next.subtitleName;
-        return next;
-      });
-      return;
-    }
+    const generation = ++subtitleLoadGeneration.current;
     setOnlineSubtitleLoading(true);
+    setOnlineSource(null);
     setSubtitleCues([]);
     setError('');
     try {
       const result = await window.cueweave.loadOnlineSubtitle(id);
-      if (!result.ok) {
-        setSelectedOnlineSubtitleId('');
-        setError('在线字幕未能加载，请稍后重试。');
+      if (generation !== subtitleLoadGeneration.current) return;
+      if (!result.ok || !result.value.cues?.length) {
+        setError('在线字幕未能加载，请在字幕面板中重试。');
         return;
       }
-      const cues = parseSubtitle(result.value.content);
-      if (!cues.length) {
-        setSelectedOnlineSubtitleId('');
-        setError('所选在线字幕没有可用内容。');
-        return;
-      }
+      setOnlineSource(result.value);
       setPanelOpen(true);
-      setSubtitleCues(cues);
       setPlayer((current) => ({
         ...current,
         subtitleName: result.value.name,
         subtitleDelaySeconds: 0,
       }));
     } catch {
-      setSelectedOnlineSubtitleId('');
-      setError('在线字幕未能加载，请稍后重试。');
+      if (generation === subtitleLoadGeneration.current)
+        setError('在线字幕未能加载，请在字幕面板中重试。');
     } finally {
-      setOnlineSubtitleLoading(false);
+      if (generation === subtitleLoadGeneration.current) setOnlineSubtitleLoading(false);
     }
   }
 
@@ -581,6 +593,8 @@ export function App() {
       return;
     }
     if (!result.value) return;
+    subtitleLoadGeneration.current++;
+    setOnlineSubtitleLoading(false);
     const subtitle = result.value;
     const cues = parseSubtitle(subtitle.content);
     if (!cues.length) {
@@ -589,7 +603,7 @@ export function App() {
     }
     setPanelOpen(true);
     setSubtitleCues(cues);
-    setSelectedOnlineSubtitleId('');
+    setOnlineSource(null);
     setPlayer((current) => ({
       ...current,
       subtitleName: subtitle.name,
@@ -615,28 +629,23 @@ export function App() {
 
   const subtitleTools = (
     <>
-      <p className="project-warning">
-        {asset
-          ? '创建项目后，可以编辑、保存和导出字幕。'
-          : '下载视频并创建项目后，可以编辑、保存和导出字幕。'}
-      </p>
-      {playback && playback.subtitles.length > 0 && (
-        <label>
-          在线字幕
-          <SelectControl
-            aria-label="在线字幕"
-            value={selectedOnlineSubtitleId}
-            disabled={onlineSubtitleLoading}
-            onChange={(event) => void loadOnlineSubtitle(event.target.value)}
-          >
-            <option value="">{onlineSubtitleLoading ? '正在加载…' : '关闭在线字幕'}</option>
-            {playback.subtitles.map((subtitle) => (
-              <option key={subtitle.id} value={subtitle.id}>
-                {subtitle.label}
-              </option>
-            ))}
-          </SelectControl>
-        </label>
+      {asset && <p className="project-warning">创建项目后，可以编辑、保存和导出字幕。</p>}
+      {playback && (
+        <p className="project-warning">
+          {playback.subtitles[0]
+            ? `原文字幕：${playback.subtitles[0].label}`
+            : '此视频没有可用的原文字幕，可加载字幕文件观看。'}
+        </p>
+      )}
+      {playback?.subtitles[0] && !onlineSource && (
+        <button
+          type="button"
+          className="quiet-button"
+          disabled={onlineSubtitleLoading}
+          onClick={() => void loadOnlineSubtitle(playback.subtitles[0]!.id)}
+        >
+          {onlineSubtitleLoading ? '正在读取字幕…' : '重新读取在线字幕'}
+        </button>
       )}
       <button type="button" className="quiet-button" onClick={() => void pickSubtitle()}>
         <SubtitlesIcon size={18} aria-hidden="true" />
@@ -978,21 +987,34 @@ export function App() {
                       : undefined
                   }
                   tools={
-                    project && (
-                      <ProjectTools
-                        provider={providerConfig}
-                        project={project}
-                        busy={projects.busy || projects.dirty}
-                        run={projects.run}
-                        onSeekMissing={(cueId) => {
-                          const index = project.cues.findIndex((cue) => cue.id === cueId);
-                          if (index < 0) return;
-                          seekTo(project.cues[index]!.startMs / 1000);
-                          document
-                            .querySelector(`[data-cue-index="${index}"]`)
-                            ?.scrollIntoView({ block: 'center' });
+                    onlinePlayback ? (
+                      <OnlineTranslationTools
+                        translation={onlineTranslation}
+                        available={Boolean(onlineSource)}
+                        loading={onlineSubtitleLoading}
+                        openSettings={() => {
+                          videoRef.current?.pause();
+                          audioRef.current?.pause();
+                          setSettingsOpen(true);
                         }}
                       />
+                    ) : (
+                      project && (
+                        <ProjectTools
+                          provider={providerConfig}
+                          project={project}
+                          busy={projects.busy || projects.dirty}
+                          run={projects.run}
+                          onSeekMissing={(cueId) => {
+                            const index = project.cues.findIndex((cue) => cue.id === cueId);
+                            if (index < 0) return;
+                            seekTo(project.cues[index]!.startMs / 1000);
+                            document
+                              .querySelector(`[data-cue-index="${index}"]`)
+                              ?.scrollIntoView({ block: 'center' });
+                          }}
+                        />
+                      )
                     )
                   }
                   editor={

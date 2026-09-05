@@ -14,6 +14,7 @@ import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { registerAppIpc } from './ipc';
+import { OnlineTranslator } from './online-translator';
 import { registerProjectIpc } from './project-ipc';
 import { SettingsStore } from './settings-store';
 import { registerSettingsIpc } from './settings-ipc';
@@ -259,6 +260,8 @@ app
       settings: settingsStore,
     });
     const disposeIpc = registerAppIpc({
+      settings: settingsStore,
+      translator: new OnlineTranslator(join(app.getPath('userData'), 'online-translation-cache')),
       window,
       rendererUrl,
       appInfo: { name: app.getName(), version: app.getVersion() },

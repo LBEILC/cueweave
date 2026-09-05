@@ -527,7 +527,7 @@ export function parsePlaybackVariants(values: unknown): ResolvedPlaybackVariant[
     });
 }
 
-function parseSubtitleTracks(metadata: Record<string, unknown>): ResolvedSubtitleTrack[] {
+export function parseSubtitleTracks(metadata: Record<string, unknown>): ResolvedSubtitleTrack[] {
   const result: ResolvedSubtitleTrack[] = [];
   for (const [field, kind] of [
     ['subtitles', 'manual'],
@@ -537,6 +537,24 @@ function parseSubtitleTracks(metadata: Record<string, unknown>): ResolvedSubtitl
     if (!collection || typeof collection !== 'object' || Array.isArray(collection)) continue;
     for (const [language, rawTracks] of Object.entries(collection)) {
       if (!Array.isArray(rawTracks) || !rawTracks.length || language.length > 80) continue;
+      // yt-dlp includes translated languages in automatic_captions. Those are not source tracks.
+      if (
+        rawTracks.every((track: unknown) => {
+          if (
+            !track ||
+            typeof track !== 'object' ||
+            !('url' in track) ||
+            typeof track.url !== 'string'
+          )
+            return false;
+          try {
+            return new URL(track.url).searchParams.has('tlang');
+          } catch {
+            return false;
+          }
+        })
+      )
+        continue;
       const named = rawTracks.find(
         (track) =>
           track &&
@@ -552,7 +570,29 @@ function parseSubtitleTracks(metadata: Record<string, unknown>): ResolvedSubtitl
       });
     }
   }
-  return result;
+  const original = result.find(
+    (track) => track.kind === 'automatic' && /-orig$/i.test(track.language),
+  );
+  const nativeLanguage =
+    typeof metadata.language === 'string'
+      ? metadata.language.toLowerCase().split('-')[0]
+      : original?.language.toLowerCase().split('-')[0];
+  const language = nativeLanguage || 'en';
+  const preferred =
+    result.find(
+      (track) => track.kind === 'automatic' && track.language.toLowerCase() === `${language}-orig`,
+    ) ??
+    result.find(
+      (track) =>
+        track.kind === 'automatic' && track.language.toLowerCase().split('-')[0] === language,
+    ) ??
+    result.find(
+      (track) => track.kind === 'manual' && track.language.toLowerCase().split('-')[0] === language,
+    ) ??
+    original ??
+    result.find((track) => track.kind === 'manual') ??
+    result[0];
+  return preferred ? [preferred] : [];
 }
 
 function resolvedMediaStream(value: unknown): ResolvedMediaStream | null {

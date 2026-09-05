@@ -151,4 +151,30 @@ describe('fixed desktop IPC', () => {
     dispose();
     expect(mocks.handlers.size).toBe(0);
   });
+  it('rejects unissued translation sources and foreign frames before accessing credentials', async () => {
+    const request = {
+      action: 'start',
+      sourceId: 'a'.repeat(36),
+      positionMs: 0,
+      targetLanguage: 'zh-CN',
+    };
+    const handler = mocks.handlers.get(DESKTOP_CHANNELS.onlineTranslation)!;
+    expect(await handler(source, request)).toMatchObject({
+      ok: false,
+      error: { code: 'FORBIDDEN' },
+    });
+    expect(
+      await handler(
+        {
+          ...source,
+          senderFrame: { url: 'https://foreign.test' },
+        } as unknown as IpcMainInvokeEvent,
+        request,
+      ),
+    ).toMatchObject({ ok: false, error: { code: 'FORBIDDEN' } });
+    expect(await handler(source, { ...request, apiKey: 'injected' })).toMatchObject({
+      ok: false,
+      error: { code: 'INVALID_REQUEST' },
+    });
+  });
 });

@@ -1724,3 +1724,64 @@ textarea {
   font-size: 0.6875rem;
   overflow-wrap: anywhere;
 }
+
+.online-translation-tools {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+}
+.online-translation-heading,
+.online-translation-heading strong {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.online-translation-heading {
+  justify-content: space-between;
+}
+.online-translation-heading strong {
+  font-size: 13px;
+  font-weight: 600;
+}
+.online-translation-language {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 8px;
+  font-size: 12px;
+}
+.online-translation-language .select-control {
+  flex: 1;
+}
+.online-translation-status,
+.online-translation-help {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--ink-secondary);
+}
+.online-translation-help .quiet-button {
+  padding: 2px 4px;
+  min-height: 28px;
+}
+.online-translation-tools .inline-error {
+  margin: 8px 0 0;
+  font-size: 12px;
+}
+@media (max-height: 650px) {
+  .subtitle-panel:has(.online-translation-tools) {
+    overflow-y: auto;
+  }
+  .subtitle-panel:has(.online-translation-tools) > * {
+    flex-shrink: 0;
+  }
+  .subtitle-panel:has(.online-translation-tools) .panel-heading {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: var(--surface);
+  }
+  .subtitle-panel:has(.online-translation-tools) .subtitle-list {
+    flex: none;
+    height: 240px;
+  }
+}

@@ -1,6 +1,12 @@
 import type { ProjectCommand, ProjectReply } from './project';
 import type { SettingsCommand, SettingsReply } from './settings';
+import type {
+  OnlineSubtitleSource,
+  OnlineTranslationCommand,
+  OnlineTranslationSnapshot,
+} from './online-translation';
 export const DESKTOP_CHANNELS = {
+  onlineTranslation: 'cueweave:subtitle:online-translation',
   settings: 'cueweave:settings:command',
   project: 'cueweave:project:command',
   appInfo: 'cueweave:app:info',
@@ -161,7 +167,10 @@ export interface DesktopBridge {
   ) => Promise<DesktopResult<{ jobId: string }>>;
   cancelLinkImport: (jobId: string) => Promise<DesktopResult<{ cancelled: boolean }>>;
   onLinkImportEvent: (listener: (event: LinkImportEvent) => void) => () => void;
-  loadOnlineSubtitle: (id: string) => Promise<DesktopResult<{ name: string; content: string }>>;
+  loadOnlineSubtitle: (id: string) => Promise<DesktopResult<OnlineSubtitleSource>>;
+  onlineTranslation: (
+    command: OnlineTranslationCommand,
+  ) => Promise<DesktopResult<OnlineTranslationSnapshot>>;
   pickPlayerSubtitle: () => Promise<DesktopResult<{ name: string; content: string } | null>>;
   openSiteLogin: (site: LoginSite) => Promise<DesktopResult<SiteLoginStatus>>;
   getSiteLoginStatus: (site: LoginSite) => Promise<DesktopResult<SiteLoginStatus>>;
