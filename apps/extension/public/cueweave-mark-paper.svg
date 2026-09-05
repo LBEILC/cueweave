@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <style>:root{--tile:#b6450f;--mark:#fff}@media(prefers-color-scheme:dark){:root{--tile:#ff9859;--mark:#202020}}</style>
+  <rect width="64" height="64" rx="16" fill="var(--tile)"/>
+  <path fill="var(--mark)" d="M14 16h14v16c0 10-5 15-14 17v-7c5-2 7-5 7-9h-9V18a2 2 0 0 1 2-2Zm24 0h14v16c0 10-5 15-14 17v-7c5-2 7-5 7-9h-9V18a2 2 0 0 1 2-2Z"/>
+</svg>

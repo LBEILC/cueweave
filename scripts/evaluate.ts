@@ -1,8 +1,8 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
-import type { AiSubtitleContext } from '../src/domain/subtitle/ai';
-import { DEFAULT_PROVIDER_SETTINGS, normalizeBaseUrl } from '../src/provider/settings';
+import type { AiSubtitleContext } from '@cueweave/core/subtitle/ai';
+import { DEFAULT_PROVIDER_SETTINGS, normalizeBaseUrl } from '@cueweave/core/provider/settings';
 import { redact } from './eval/io';
 import { runEvaluation } from './eval/runner';
 import type { EvalCase } from './eval/types';

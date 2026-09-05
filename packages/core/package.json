@@ -1,0 +1,18 @@
+{
+  "name": "@cueweave/core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "description": "Shared subtitle processing and translation engine",
+  "exports": {
+    ".": "./src/domain/subtitle/index.ts",
+    "./subtitle": "./src/domain/subtitle/index.ts",
+    "./subtitle/*": "./src/domain/subtitle/*.ts",
+    "./provider/*": "./src/provider/*.ts",
+    "./settings/subtitle": "./src/settings/subtitle.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  }
+}

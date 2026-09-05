@@ -1,4 +1,4 @@
-import type { DisplayCue } from '../../src/domain/subtitle';
+import type { DisplayCue } from '@cueweave/core/subtitle';
 import { currentAttempt, successfulCues } from './types';
 import type { EvalRun } from './types';
 
@@ -18,7 +18,11 @@ export function cueWarnings(cue: DisplayCue): string[] {
 
 export function summarize(run: EvalRun) {
   const cues = successfulCues(run);
-  const attempts = [...run.entityAttempts, ...Object.values(run.results).flat()];
+  const attempts = [
+    ...run.entityAttempts,
+    ...(run.planningAttempts ?? []),
+    ...Object.values(run.results).flat(),
+  ];
   const requests = attempts.flatMap((attempt) => attempt.requests);
   const expected = new Set(run.windows.flatMap((window) => window.tokens.map((token) => token.id)));
   const counts = new Map<string, number>();
@@ -54,6 +58,7 @@ export function summarize(run: EvalRun) {
     windows: run.windows.length,
     successfulWindows: latest.filter((attempt) => attempt?.status === 'success').length,
     failedWindows: latest.filter((attempt) => attempt?.status === 'failed').length,
+    partialWindows: latest.filter((attempt) => attempt?.status === 'partial').length,
     pendingWindows: latest.filter(
       (attempt) => !attempt || ['running', 'interrupted'].includes(attempt.status),
     ).length,

@@ -37,3 +37,40 @@ jobs:
           path: .output/*-chrome.zip
           if-no-files-found: error
           include-hidden-files: true
+
+  desktop-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify desktop source
+        run: npm run typecheck --workspace @cueweave/desktop
+
+      - name: Run real Electron smoke checks
+        run: npm run test:desktop:smoke
+
+      - name: Build Windows installer
+        run: npm run dist:desktop
+
+      - name: Verify unpacked application
+        run: npm run test:desktop:d0
+
+      - name: Verify installer lifecycle
+        run: npm run test:desktop:installer
+
+      - name: Upload desktop installer
+        uses: actions/upload-artifact@v7
+        with:
+          name: cueweave-desktop-windows-x64
+          path: apps/desktop/dist/package/CueWeave-*-x64.exe
+          if-no-files-found: error

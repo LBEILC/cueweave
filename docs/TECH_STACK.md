@@ -1,10 +1,10 @@
 # CueWeave 技术栈
 
-本文档是 CueWeave 工程选型的规范入口。具体依赖版本由 `package.json` 和锁文件维护，本文只记录稳定的技术边界与选择理由。
+本文档维护共享工程与浏览器扩展的技术选型；桌面宿主的选型见[桌面端开发规格](DESKTOP.md#工程选型与进程边界)。具体依赖版本由 `package.json` 和锁文件维护，本文只记录稳定的技术边界与选择理由。
 
 ## 结论
 
-CueWeave 采用 WXT + TypeScript 构建 Manifest V3 扩展；Popup 与设置页使用 React；字幕处理、调度、校验和导出保持为无界面的纯 TypeScript 模块。数据使用 `chrome.storage.local` 与 IndexedDB 分层保存，自动化测试由 Vitest 和 Playwright 承担。
+CueWeave 使用 npm workspaces 管理应用与共享包，具体边界见[仓库结构](WORKSPACE.md)。浏览器扩展采用 WXT + TypeScript 构建 Manifest V3，界面使用 React；字幕处理、模型传输、校验和导出由共享 TypeScript 核心提供。扩展数据使用 `chrome.storage.local` 与 IndexedDB 分层保存；自动化测试由 Vitest 执行，浏览器验收流程见[开发指南](DEVELOPMENT.md)。桌面应用采用 Electron，入口见[桌面工作区](../apps/desktop/README.md)。
 
 ## 核心栈
 
@@ -20,10 +20,10 @@ CueWeave 采用 WXT + TypeScript 构建 Manifest V3 扩展；Popup 与设置页�
 | 大型持久化     | IndexedDB（通过轻量封装）            | 完整字幕、语义分段、翻译结果和 LRU 元数据                                             |
 | Schema 校验    | JSON Schema + 静态 TypeScript 校验   | 约束模型响应并执行兼容 Manifest V3 CSP 的结构与完整性检查                             |
 | 单元与集成测试 | Vitest                               | 字幕管线、Provider、缓存键、导出与错误降级                                            |
-| 浏览器端测试   | Playwright                           | 生成后的真实扩展、YouTube 页面行为和设置流程                                          |
+| 浏览器验收     | 加载构建后的扩展                     | YouTube 页面行为、播放器同步和设置流程                                                |
 | 静态质量       | ESLint + Prettier + TypeScript       | 代码规则、格式和类型检查                                                              |
 | 包管理         | npm                                  | 与 Node 工具链保持一致，使用锁文件保证可复现安装                                      |
-| CI             | GitHub Actions                       | 类型检查、单元测试、构建、端到端测试和安装包产出                                      |
+| CI             | GitHub Actions                       | 格式检查、类型检查、Lint、单元测试、构建和安装包产出                                  |
 
 Node 运行时的有效版本以仓库根目录的版本文件和 `package.json#engines` 为准，不在本文重复记录。
 
@@ -63,7 +63,7 @@ Node 运行时的有效版本以仓库根目录的版本文件和 `package.json#
 - 直接使用标准 `fetch`，不绑定单一厂商 SDK。
 - 用同一契约适配 Chat Completions 与 Responses API。
 - Base URL、模型名、超时和重试策略均由设置提供。
-- 自定义远程域名必须通过运行时权限申请，不预先请求所有网站权限。
+- 扩展访问自定义远程域名必须通过运行时权限申请，不预先请求所有网站权限；桌面端由宿主执行网络策略。
 - `localhost` Provider 与远程 Provider 使用同一接口和错误分类。
 - Chat Completions、Responses 和自动回退由同一 Provider 契约实现；本机代理可以固定使用 Responses。
 - 测试使用本地确定性模拟服务，不需要真实 API Key。
@@ -74,4 +74,4 @@ Node 运行时的有效版本以仓库根目录的版本文件和 `package.json#
 - 全局状态框架：初期状态规模不足以证明额外抽象成本。
 - Tailwind 等运行时无关但配置较重的样式体系：播放器覆盖层更适合小型、可审计的原生 CSS。
 - OpenAI 专用 SDK：会增加跨 Provider URL 和响应格式适配成本。
-- Whisper 或媒体处理工具链：音频转录不在首个版本范围内。
+- 扩展内的 Whisper 或媒体处理工具链：音频转录由桌面宿主接入。

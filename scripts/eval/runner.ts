@@ -8,17 +8,17 @@ import {
   extractTranscriptEntityCandidates,
   extractTranscriptEvidenceTerms,
   ENTITY_ALIAS_PROMPT_VERSION,
-} from '../../src/domain/subtitle';
-import type { TranslationTerm } from '../../src/domain/subtitle';
-import { AI_PROMPT_VERSION, DISPLAY_SEGMENTATION_VERSION } from '../../src/domain/subtitle/ai';
-import type { AiSubtitleContext } from '../../src/domain/subtitle/ai';
-import { parseJson3Captions } from '../../src/platform/youtube/captions';
+} from '@cueweave/core/subtitle';
+import type { TranslationTerm } from '@cueweave/core/subtitle';
+import { AI_PROMPT_VERSION, DISPLAY_SEGMENTATION_VERSION } from '@cueweave/core/subtitle/ai';
+import type { AiSubtitleContext } from '@cueweave/core/subtitle/ai';
+import { parseJson3Captions } from '../../apps/extension/src/platform/youtube/captions';
 import {
   resolveVideoEntityAliases,
   translateTokenWindow,
-} from '../../src/provider/chatCompletions';
-import type { ProviderSettings } from '../../src/provider/types';
-import { ProviderError } from '../../src/provider/types';
+} from '@cueweave/core/provider/chatCompletions';
+import type { ProviderSettings } from '@cueweave/core/provider/types';
+import { ProviderError } from '@cueweave/core/provider/types';
 import { acquireLock, hash, pipelineHash, PROJECT_ROOT, readRun, writeJson } from './io';
 import { createRuntime } from './trace';
 import type { RequestBudget } from './trace';

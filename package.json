@@ -5,14 +5,28 @@
   "description": "Weave fragmented YouTube captions into fluent bilingual subtitles.",
   "license": "MIT",
   "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "engines": {
     "node": ">=24.0.0 <25"
   },
   "scripts": {
-    "dev": "wxt",
-    "build": "wxt build",
-    "zip": "wxt zip",
-    "typecheck": "tsc --noEmit",
+    "dev": "npm run dev --workspace @cueweave/extension",
+    "dev:desktop": "npm run dev --workspace @cueweave/desktop",
+    "build:desktop": "npm run build --workspace @cueweave/desktop",
+    "start:desktop": "npm run start --workspace @cueweave/desktop",
+    "test:desktop:smoke": "npm run test:smoke --workspace @cueweave/desktop",
+    "pack:desktop": "npm run pack:dir --workspace @cueweave/desktop",
+    "dist:desktop": "npm run dist:win --workspace @cueweave/desktop",
+    "test:desktop:d0": "npm run test:d0 --workspace @cueweave/desktop",
+    "test:desktop:links": "npm run test:links --workspace @cueweave/desktop",
+    "test:desktop:installer": "npm run test:installer --workspace @cueweave/desktop",
+    "preview:ui": "node scripts/preview-ui.mjs",
+    "build": "npm run build --workspace @cueweave/extension",
+    "zip": "npm run zip --workspace @cueweave/extension",
+    "typecheck": "npm run typecheck --workspace @cueweave/core && npm run typecheck --workspace @cueweave/extension && npm run typecheck --workspace @cueweave/desktop && tsc --noEmit -p tsconfig.json",
     "lint": "eslint .",
     "format:check": "prettier --check .",
     "fixture:youtube": "node scripts/fetch-youtube-fixture.mjs",
@@ -21,27 +35,20 @@
     "eval:compare": "tsx scripts/evaluate.ts compare",
     "test": "vitest run",
     "test:watch": "vitest",
-    "check": "npm run format:check && npm run typecheck && npm run lint && npm run test && npm run build",
-    "postinstall": "wxt prepare"
-  },
-  "dependencies": {
-    "@phosphor-icons/react": "^2.1.10",
-    "react": "^19.2.0",
-    "react-dom": "^19.2.0"
+    "check": "npm run format:check && npm run typecheck && npm run lint && npm run test && npm run build && npm run build:desktop",
+    "postinstall": "npm run prepare:types --workspace @cueweave/extension"
   },
   "devDependencies": {
-    "@types/chrome": "^0.1.32",
+    "@cueweave/core": "0.1.0",
+    "@eslint/js": "^9.35.0",
     "@types/node": "^26.4.1",
-    "@types/react": "^19.2.0",
-    "@types/react-dom": "^19.2.0",
-    "@wxt-dev/module-react": "^1.2.2",
+    "esbuild": "^0.28.2",
     "eslint": "^9.35.0",
     "fake-indexeddb": "^6.2.5",
     "prettier": "^3.6.2",
     "tsx": "^4.23.13",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.42.0",
-    "vitest": "^4.1.11",
-    "wxt": "^0.21.4"
+    "vitest": "^4.1.11"
   }
 }

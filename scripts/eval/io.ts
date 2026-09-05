@@ -48,10 +48,11 @@ export async function readRun(directory: string): Promise<EvalRun> {
   }
   // Request traces are committed independently; recover calls made after the last window checkpoint.
   const attempts = new Map(
-    [...value.entityAttempts, ...Object.values(value.results).flat()].map((attempt) => [
-      attempt.id,
-      attempt,
-    ]),
+    [
+      ...value.entityAttempts,
+      ...(value.planningAttempts ?? []),
+      ...Object.values(value.results).flat(),
+    ].map((attempt) => [attempt.id, attempt]),
   );
   const traceDirectory = path.join(directory, 'requests');
   let files: string[] = [];
@@ -95,10 +96,10 @@ export async function pipelineHash(): Promise<string> {
       else if (/\.ts$/u.test(entry.name) && !/\.test\.ts$/u.test(entry.name)) files.push(relative);
     }
   }
-  await visit('src/domain/subtitle');
-  await visit('src/provider');
+  await visit('packages/core/src');
+  await visit('apps/extension/src/provider');
   files.push(
-    'src/platform/youtube/captions.ts',
+    'apps/extension/src/platform/youtube/captions.ts',
     'scripts/eval/runner.ts',
     'scripts/eval/trace.ts',
     'scripts/eval/io.ts',
@@ -144,6 +145,9 @@ export async function copyReportFonts(directory: string): Promise<void> {
   const target = path.join(directory, 'assets');
   await mkdir(target, { recursive: true });
   for (const filename of ['MiSans-Regular.woff2', 'MiSans-Semibold.woff2', 'MiSans-LICENSE.pdf']) {
-    await copyFile(path.join(PROJECT_ROOT, 'public/fonts', filename), path.join(target, filename));
+    await copyFile(
+      path.join(PROJECT_ROOT, 'apps/extension/public/fonts', filename),
+      path.join(target, filename),
+    );
   }
 }

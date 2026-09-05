@@ -6,6 +6,7 @@ dist/
 coverage/
 playwright-report/
 test-results/
+.impeccable/review/
 
 # Local settings and secrets
 .env
@@ -27,3 +28,6 @@ Thumbs.db
 # Downloaded subtitle fixtures
 .fixtures/
 .eval/
+
+# Local historical archives
+.archive/

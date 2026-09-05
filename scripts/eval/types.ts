@@ -1,12 +1,12 @@
-import type { AiSubtitleContext } from '../../src/domain/subtitle/ai';
+import type { AiSubtitleContext } from '@cueweave/core/subtitle/ai';
 import type {
   DisplayCue,
   SourceToken,
   TokenWindow,
   TranslationTerm,
-} from '../../src/domain/subtitle';
-import type { ProviderDiagnostic } from '../../src/provider/runtime';
-import type { ProviderProtocol } from '../../src/provider/types';
+} from '@cueweave/core/subtitle';
+import type { ProviderDiagnostic } from '@cueweave/core/provider/runtime';
+import type { ProviderProtocol } from '@cueweave/core/provider/types';
 
 export interface RequestSummary {
   id: string;
@@ -20,7 +20,7 @@ export interface RequestSummary {
 export interface Attempt {
   id: string;
   contextHash: string;
-  status: 'running' | 'success' | 'failed' | 'interrupted';
+  status: 'running' | 'success' | 'partial' | 'failed' | 'interrupted';
   startedAt: string;
   durationMs: number;
   stages: string[];
@@ -69,6 +69,7 @@ export interface EvalRun {
   tokens: SourceToken[];
   windows: TokenWindow[];
   entityAttempts: Attempt[];
+  planningAttempts?: Attempt[];
   aliases: TranslationTerm[] | null;
   results: Record<string, Attempt[]>;
   cases: EvalCase[];
@@ -81,6 +82,6 @@ export function currentAttempt(run: EvalRun, windowId: string): Attempt | undefi
 export function successfulCues(run: EvalRun): DisplayCue[] {
   return run.windows.flatMap((window) => {
     const attempt = currentAttempt(run, window.id);
-    return attempt?.status === 'success' ? attempt.cues : [];
+    return attempt?.status === 'success' || attempt?.status === 'partial' ? attempt.cues : [];
   });
 }

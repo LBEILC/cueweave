@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
-import type { ProviderRuntime } from '../../src/provider/runtime';
+import type { ProviderRuntime } from '@cueweave/core/provider/runtime';
 import type { Attempt, RequestSummary } from './types';
 import { writeJson } from './io';
 

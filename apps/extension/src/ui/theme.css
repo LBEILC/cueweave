@@ -1,0 +1,222 @@
+@font-face {
+  font-family: 'MiSans';
+  src: url('/fonts/MiSans-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'MiSans';
+  src: url('/fonts/MiSans-Semibold.woff2') format('woff2');
+  font-weight: 600;
+  font-display: swap;
+}
+
+:root {
+  color-scheme: light dark;
+  --font-interface: 'MiSans', 'Mi Sans', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+  --paper: #f8f4ed;
+  --surface: #fffdf9;
+  --surface-muted: #eeeae4;
+  --ink: #383838;
+  --ink-secondary: #69645e;
+  --line: #dedbd5;
+  --line-strong: #8e8982;
+  --accent: #b6450f;
+  --accent-hover: #a73c09;
+  --accent-wash: #eeeae4;
+  --on-accent: #ffffff;
+  --success: #496750;
+  --success-wash: #eaf0e9;
+  --warning: #7b6037;
+  --warning-wash: #f2eadb;
+  --danger: #925448;
+  --danger-wash: #f4e9e5;
+  --focus: #b6450f;
+  --radius-control: 8px;
+  --radius-panel: 14px;
+  --duration-fast: 150ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  font-family: var(--font-interface);
+  color: var(--ink);
+  background: var(--paper);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #1a1a1a;
+    --surface: #242424;
+    --surface-muted: #303030;
+    --ink: #eeeeee;
+    --ink-secondary: #b9b9b9;
+    --line: #414141;
+    --line-strong: #898989;
+    --accent: #ff9859;
+    --accent-hover: #ffb184;
+    --accent-wash: #303030;
+    --on-accent: #202020;
+    --success: #b9c8bb;
+    --success-wash: #2d322e;
+    --warning: #dbc59e;
+    --warning-wash: #34312b;
+    --danger: #deb4ad;
+    --danger-wash: #382d2b;
+    --focus: #ff9859;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+html {
+  scroll-behavior: smooth;
+  scrollbar-color: var(--line-strong) var(--paper);
+}
+body {
+  margin: 0;
+}
+button,
+input,
+select {
+  font: inherit;
+}
+button,
+a,
+input {
+  -webkit-tap-highlight-color: transparent;
+}
+button {
+  cursor: pointer;
+}
+button:disabled {
+  cursor: not-allowed;
+}
+button,
+a,
+input,
+select {
+  outline-offset: 4px;
+}
+:is(button, a, input, select):focus-visible {
+  outline: 2px solid var(--focus);
+}
+input {
+  caret-color: var(--accent);
+}
+::selection {
+  color: var(--ink);
+  background: var(--accent-wash);
+}
+
+.cw-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 9px 15px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.4;
+  text-decoration: none;
+  transition:
+    background var(--duration-fast),
+    color var(--duration-fast),
+    border-color var(--duration-fast);
+}
+.cw-button:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+.cw-button.secondary {
+  color: var(--ink);
+  border-color: var(--line);
+  background: var(--surface);
+}
+.cw-button.secondary:hover:not(:disabled) {
+  background: var(--surface-muted);
+  border-color: var(--line-strong);
+}
+.cw-button:disabled {
+  color: var(--ink-secondary);
+  background: var(--surface-muted);
+  border-color: var(--line);
+}
+.cw-button svg {
+  flex-shrink: 0;
+}
+
+.cw-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--ink);
+  text-decoration: none;
+}
+.cw-brand img {
+  width: 32px;
+  height: 32px;
+}
+.cw-brand strong {
+  font-size: 1rem;
+  font-weight: 600;
+}
+.cw-brand span {
+  color: var(--ink-secondary);
+  font-size: 0.75rem;
+}
+.cw-brand-copy {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.cw-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  border-radius: 5px;
+  padding: 4px 8px;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+.cw-status.success {
+  color: var(--success);
+  background: var(--success-wash);
+}
+.cw-status.warning {
+  color: var(--warning);
+  background: var(--warning-wash);
+}
+.cw-status.neutral {
+  color: var(--ink-secondary);
+  background: var(--surface-muted);
+}
+.cw-status.working {
+  color: var(--accent);
+  background: var(--accent-wash);
+}
+.cw-spin {
+  animation: cw-spin 1s linear infinite;
+}
+@keyframes cw-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation: none !important;
+    transition: none !important;
+  }
+}

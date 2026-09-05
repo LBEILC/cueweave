@@ -4,7 +4,7 @@
 
 先阅读[产品需求](docs/PRODUCT_SPEC.md)、[系统架构](docs/ARCHITECTURE.md)和[技术栈](docs/TECH_STACK.md)。功能范围由产品需求决定，模块边界由架构文档决定；路线图不替代这两份规范。
 
-项目建立可执行工程后，安装、构建和测试命令以 `package.json#scripts` 为唯一事实来源。
+应用和共享包的归属见[仓库结构](docs/WORKSPACE.md)。依赖在仓库根目录安装，安装、构建和测试命令以 `package.json#scripts` 为唯一事实来源。
 
 ## 变更要求
 

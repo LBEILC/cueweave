@@ -1,0 +1,118 @@
+.player-preview {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 28px 24px;
+}
+.player-preview-heading h1 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 600;
+}
+.player-preview-heading p,
+.player-preview-note {
+  color: var(--ink-secondary);
+  font-size: 13px;
+}
+.player-preview-heading {
+  margin-bottom: 20px;
+}
+#stage {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: #484848;
+  overflow: hidden;
+}
+#stage[data-scene='light'] {
+  background: #d5d5d5;
+}
+#stage:fullscreen {
+  aspect-ratio: auto;
+  height: 100%;
+}
+.sample-label {
+  position: absolute;
+  top: 20px;
+  left: 24px;
+  color: #eee;
+  font-size: 13px;
+}
+#stage[data-scene='light'] .sample-label {
+  color: #383838;
+}
+.sample-controls {
+  position: absolute;
+  inset: auto 0 0;
+  height: 48px;
+  padding: 0 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #242424;
+  color: #eee;
+  font-size: 12px;
+}
+.ytp-autohide .sample-controls {
+  display: none;
+}
+.player-preview-controls {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 20px;
+  margin-top: 24px;
+}
+.player-preview-controls label {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  font-size: 13px;
+}
+.player-preview-controls output {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-secondary);
+}
+.player-preview-controls select,
+.player-preview-controls input[type='range'] {
+  width: 100%;
+  min-width: 0;
+}
+.player-preview-controls select,
+.player-preview-controls button {
+  min-height: 40px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+}
+.player-preview-controls input {
+  accent-color: var(--accent);
+}
+.player-preview-controls :focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 3px;
+}
+.player-preview-controls :disabled {
+  opacity: 0.5;
+}
+.player-preview-controls .check-field {
+  align-content: center;
+}
+@media (max-width: 760px) {
+  .player-preview {
+    padding: 20px 0;
+  }
+  .player-preview-heading,
+  .player-preview-controls,
+  .player-preview-note {
+    margin-left: 16px;
+    margin-right: 16px;
+  }
+  .player-preview-controls {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+  }
+}

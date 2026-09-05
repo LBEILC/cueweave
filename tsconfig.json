@@ -1,9 +1,8 @@
 {
-  "extends": "./.wxt/tsconfig.json",
+  "extends": "./tsconfig.base.json",
   "compilerOptions": {
-    "jsx": "react-jsx",
-    "noUncheckedIndexedAccess": true,
-    "exactOptionalPropertyTypes": true,
-    "useUnknownInCatchVariables": true
-  }
+    "types": ["node", "vite/client"]
+  },
+  "include": ["scripts/**/*.ts", "vitest.config.ts", "apps/extension/.wxt/wxt.d.ts"],
+  "exclude": ["node_modules", "**/.output", "**/dist", ".eval", ".fixtures"]
 }

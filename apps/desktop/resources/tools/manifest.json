@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "platform": "win32-x64",
+  "tools": [
+    {
+      "name": "ffmpeg",
+      "version": "6.1.1-essentials_build-www.gyan.dev",
+      "sha256": "04e1307997530f9cf2fe35cba2ca7e8875ca91da02f89d6c7243df819c94ad00",
+      "license": "GPL-3.0-or-later",
+      "source": "https://github.com/FFmpeg/FFmpeg/commit/e38092ef93"
+    },
+    {
+      "name": "ffprobe",
+      "version": "6.1.1-essentials_build-www.gyan.dev",
+      "sha256": "3a7e2dc003dc2cd1472827e4c7c4f056ae1ae0ae7c5bbc580c99b49827351ba4",
+      "license": "GPL-3.0-or-later",
+      "source": "https://github.com/FFmpeg/FFmpeg/commit/e38092ef93"
+    },
+    {
+      "name": "yt-dlp",
+      "version": "2026.08.19",
+      "sha256": "66674953fe251b89f4d08c5f0e35e0728679bd67ab3d7d05c0562af101dd3e7a",
+      "license": "Unlicense",
+      "source": "https://github.com/yt-dlp/yt-dlp/releases/tag/2026.08.19"
+    },
+    {
+      "name": "deno",
+      "version": "2.9.6",
+      "sha256": "2ff9493dfa356be2975f477025ea770088e9e9cb2c83d983236d13561b96b7a6",
+      "archiveSha256": "15e5300b0ba3c3695a7621d90160a746ec9e710228cee639afa9d580f6e3cd11",
+      "license": "MIT",
+      "source": "https://github.com/denoland/deno/releases/tag/v2.9.6"
+    }
+  ],
+  "binaryDistributor": "https://www.gyan.dev/ffmpeg/builds/"
+}

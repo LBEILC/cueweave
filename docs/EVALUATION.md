@@ -105,3 +105,115 @@ npm run eval:translate -- --input .fixtures/youtube/VeizK1M7V7E.en.full.json --r
 案例文件包含时间范围、人工核对提示和可选词面 `required` / `forbidden` 检查。标签不发送给模型；命中要求也不等于翻译准确。原文覆盖不足时显示未完整覆盖。项目案例覆盖已反馈的 Hey 边界、Astra / Sol、长句和 ChatGPT 转录变体；版本号点号另有确定性的领域测试。
 
 建议每次只改一个变量，先看重点片段，再跑全片回归；后续增加不同主题、口音和长度的视频作为未参与调优的保留集，避免只适配这一个访谈。语义完整、专名可信、口语自然、分屏顺畅仍需人工判断。离线报告不能替代最后少量的音画同步、实际换行和跳转播放验证。
+
+## 窗口与恢复策略实验
+
+`scripts/experiment-resilience.ts` 是独立的离线实验入口，不使用 `eval:translate` 的生产修复流程。D 组复用已有 C 规划的窗口，E 组重新规划相邻窗口的语义接缝；两组使用相同的翻译、语义复核与局部恢复策略。基线位置由脚本中的 `baselinePath` / `originalPath` 指定，运行前须备齐对应的结果和规划文件。
+
+```powershell
+node --import tsx scripts/experiment-resilience.ts --out .eval/experiments/resilience-trial --dry-run
+node --import tsx scripts/experiment-resilience.ts --out .eval/experiments/resilience-trial --token-file C:/Users/LBLC/.v3-llm-token
+```
+
+用 `--case` 选择一个案例，用 `--max-requests` 限制本次两组共享的请求总数。所有规划、复核、修复和截断重试均计入上限；可选案例见 `scripts/eval/window-experiment.ts` 的 `CASES`。模型和端点由实验入口指定，实际值及输出额度写入 `manifest.json`。参数以各入口的 `--help` 为准。
+
+要检查旧错误能否被恢复，使用旧运行的首次响应，跳过重新翻译：
+
+```powershell
+node --import tsx scripts/replay-resilience.ts --from .eval/experiments/semantic-windows-20260903/C-planned --out .eval/experiments/recovery-trial --starts 400,792480,1324480,2911680 --token-file C:/Users/LBLC/.v3-llm-token
+```
+
+`--starts` 接收旧结果中的窗口开始毫秒数；`--dry-run` 先验证输入，不读取密钥或请求模型。默认选择该窗口首次尝试的第一个请求；用 `--request-index` 指定其他请求（下标从 0 开始），例如选取输出额度重试后的完整响应。回放采用所选请求保存的上下文。这是恢复能力验证，不能拿它的请求数冒充从零开始翻译的成本。
+
+两个实验入口都要求新输出目录，不支持 `--resume`。中断后保留检查点和请求记录；重试时使用新目录。最终状态以 `result.json` / `summary.json` 为准，进程退出不等于所有字幕或语义复核均已成功。
+
+除通用输出外，实验还记录 `manifest.json`、`recovery.json`；双组实验的 `plans.json` 记录独立窗口规划。根目录 `summary.json` 汇总包含规划的总请求数和用量，HTML 中的翻译流程统计不包含独立规划请求。
+
+解释实验状态时分开看三个指标：完整产出、词元覆盖、语义复核。`partial` 表示只接受了部分字幕，不能算完整成功；`reviewComplete: false` 表示复核不可用时保留了已有候选，不能算语义检查通过。长字幕、阅读速度和口语停顿作为质量风险保留；真正的漏译或对齐问题只修复对应固定 ID，结构损坏时另行请求语义分段。具体处理见 `scripts/eval/resilient-translation.ts` 的 `recoverCandidate`，输出截断处理见 `scripts/eval/complete-output.ts` 的 `requestCompleteOutput`。
+
+### E 全片运行
+
+`scripts/experiment-full-seams.ts` 验证基线窗口覆盖完整原文，再处理相邻双窗口的内部接缝；奇数个窗口留下的尾部窗口原样处理。规划不通过时使用对应原始窗口，并记录回退原因。分组之间的外侧边界不移动，具体规划规则见 `scripts/eval/seam-planner.ts` 的 `seamPrompt`。
+
+```powershell
+node --import tsx scripts/experiment-full-seams.ts --out .eval/runs/full-e-trial --dry-run
+node --import tsx scripts/experiment-full-seams.ts --out .eval/runs/full-e-trial --token-file C:/Users/LBLC/.v3-llm-token
+```
+
+组间可以并发，组内按时间顺序翻译。输入固定使用全片原文证据和已确认的视频别名；不继承旧运行的中文译文，仅使用本组前面已经接受的译文和前后原文。因此它是独立全片实验，与按固定时间顺序积累全部历史译文的播放器仍有区别。
+
+该入口支持 `--resume`。输入、源码和固定上下文必须不变；符合本次上下文的完整产出且已完成复核的窗口会复用。其他窗口继续尝试；前一窗结果变化时，本组后一窗的上下文可能变化并需重新翻译。请求上限按本次启动计算，历史请求保留。不要在运行中修改实验源码；新算法使用新目录。
+
+输出包括逐窗口与逐请求检查点、规划记录、恢复记录、源码快照和分页报告。复核问题用 `ids` 数组表示受影响字幕；数组成员逐个校验，跨条问题的所有成员都进入修复。JSON 的复核问题数按问题计，不把涉及多条字幕的一个问题误算成多个。
+
+全片运行的 `summary.json` 与 HTML 请求统计包含独立规划；`full-summary.json` 另列规划回退、尚未复核的窗口、未解决问题及修复情况。`result.json` 的 `planningAttempts` 保存规划请求，`recovery.json` 通过 `attemptId` 区分历史与最终尝试。全片产物位于用户指定的输出目录，不会覆盖旧实验或扩展缓存。
+
+### 滚动接缝与局部重分段
+
+用 `scripts/experiment-rolling.ts` 对照窗口规划和展示边界修复。输入位置与选取片段见该入口的 `baselinePath`、`savedPath` 和 `CASES`；用 `--dry-run` 验证同一原文范围完整覆盖。
+
+```powershell
+node --import tsx scripts/experiment-rolling.ts --out .eval/experiments/rolling-trial --dry-run
+node --import tsx scripts/experiment-rolling.ts --out .eval/experiments/rolling-trial --token-file C:/Users/LBLC/.v3-llm-token
+```
+
+- **E-fixed**：复用已记录的 E 窗口边界，重新翻译。历史规划成本不计入本轮请求。
+- **F-rolling**：相邻窗口规划后确定左窗，右窗暂存，与下一原始窗口继续规划。所有片段内部接缝均可调整，片段最外侧边界仍固定。规划失败保留该次输入边界并记录原因，见 `scripts/eval/rolling-seams.ts` 的 `planRollingSeams`。
+- **G-repaired**：复用 F 译文，另行复核展示边界，由模型选择连续范围重分段。只在原文覆盖、语义及分段收益复核通过后替换，失败则保留该范围旧字幕，无关联修复可分别提交。含转写修正记录的范围暂不重分段，见 `scripts/eval/boundary-repair.ts` 的 `repairDisplayBoundaries`。
+
+E/F 使用相同原文证据、已确认别名和上下文策略，不输入历史中文答案。各片段内按顺序使用前面的已接受译文；案例标签和评审要求不发送给模型。G 的报告按片段聚合输出，其“窗口”不是新增的翻译请求窗口，不能将 G 的窗口成功数与 E/F 直接比较。
+
+输出中的 `E-vs-F/report.html` 用于观察滚动规划，`F-vs-G/report.html` 用于观察局部重分段。根目录 `summary.json` 汇总三档新增成本；G 的请求与用量仅为追加成本，完整 G 流程成本须加上 F。`plans.json` 保存切点与回退，`repairs.json` 保存局部修复前后和保留原因；复核完成不等于所有问题都被发现或修好。
+
+`--max-requests` 限制本次共享请求总数，涵盖规划、翻译、复核、修复和输出截断重试。使用新目录，不支持续跑；中断保留检查点与独立日志。模型、端点、源码指纹和上下文策略记录在 `manifest.json`，实际参数见 `--help`。
+
+仅迭代局部修复时，可以直接复用 F 的已存译文，不重新规划或翻译：
+
+```powershell
+node --import tsx scripts/replay-boundaries.ts --from .eval/experiments/rolling-trial/F-rolling --out .eval/experiments/boundary-replay --token-file C:/Users/LBLC/.v3-llm-token
+```
+
+回放要求来源目录的 `plans.json` 与结果窗口一致，使用新输出目录，不支持续跑。`summary.json` 的成本只包含本次新增请求，完整流程须加上来源运行成本；来源指纹记录在 `manifest.json`。`repairs.json` 区分 `applied`（通过本轮验收并替换）与 `retained`（未替换，旧字幕仍可用）。两者都是执行结果，不代表人工质量判决；跨条修复的整个范围一起提交。
+
+### 连续范围与跨窗联合复核
+
+`scripts/experiment-continuous.ts` 将相邻的原始窗口合并为连续规划范围，案例标签只用于评审，不决定处理切点。来源位置和选择范围见入口中的 `baselinePath`、`oldPath`、`selected`。
+
+```powershell
+node --import tsx scripts/experiment-continuous.ts --out .eval/experiments/continuous-trial --dry-run
+node --import tsx scripts/experiment-continuous.ts --out .eval/experiments/continuous-trial --token-file C:/Users/LBLC/.v3-llm-token
+```
+
+该实验分开记录以下路径：
+
+- `G2-reference`：相同原文范围的历史 G2 输出，不产生新调用。
+- `H-translation`：连续滚动规划并重新翻译，使用 G2 的翻译提示词；前面接受的译文跨旧片段边界传递。
+- `H-refined`：复用 H 的译文，对连续范围执行 G2 展示边界修复；请求统计为追加成本。
+- `G2-joint-replay`：直接复用历史 G2 译文，仅联合复核旧接缝两侧的少量字幕；请求统计也为追加成本，不是完整翻译成本。
+
+`scripts/eval/continuous-boundaries.ts` 的 `continuousWindowGroups` 按原文词元连续性组合窗口，拒绝重复、重叠，不跨未选中的原文空缺。`repairAcrossSeams` 用右侧首词元 ID 定位接缝，字幕合并后重新定位后续接缝；最多取两侧各三条字幕共同修复。原文缺失时不猜测补齐，已经包含在同一字幕内的接缝不重复处理。模型复核、重分段和验收复用 `repairDisplayBoundaries`；两侧作为同一连续原文范围提交。
+
+主对比位于 `G2-vs-H/report.html`；`G2-vs-joint/report.html` 隔离旧接缝修复效果；`H-raw-vs-refined/report.html` 查看重新翻译后的追加修复。根目录 `summary.json` 只汇总新 H 请求及两条派生路径的追加成本，记录规划回退及复核状态；历史参考统计见 `G2-reference` 报告。历史参考与新 H 之间仍有模型随机性和上下文路径差异，不是严格单变量的准确率实验。
+
+该入口要求新目录，不支持续跑。`--max-requests` 对全部新请求共享计数；检查点、独立请求日志和源码快照保留在输出目录，实际参数见 `--help`。连续样本最外侧仍为所选范围边界；报告不代表已经验证整片或浏览器调度。
+
+### 连续首轮与队列耗时
+
+用 `scripts/experiment-first-pass.ts` 评测观看视频所需的首次可用结果。滚动规划确定左窗后即可开始翻译，同时规划下一处接缝；不必等整片规划完成。每窗使用已经接受的前文译文和前后原文，正常路径不追加模型复核。翻译与异常恢复实现见 `packages/core/src/provider/firstPass.ts` 的 `translateFirstPass`。
+
+```powershell
+node --import tsx scripts/experiment-first-pass.ts --out .eval/runs/first-pass-trial --dry-run
+node --import tsx scripts/experiment-first-pass.ts --out .eval/runs/first-pass-trial --token-file C:/Users/LBLC/.v3-llm-token
+```
+
+用 `--windows` 先测开头部分，省略则处理完整字幕；参数见 `--help`。相同源码、输入和上下文可用 `--resume` 续跑，完整且上下文一致的结果会复用。每次启动独立计请求预算，历史调用仍计入运行总成本。运行时不要修改翻译或规划源码。
+
+结构损坏时从原文重新生成完整窗口；个别字幕校验失败时仅恢复对应固定范围，并分别接收通过校验的结果。原有可用字幕不会因另一个恢复条目失败而丢弃。超过恢复预算仍失败的范围明确计为缺失，不把原文回退算成翻译成功。可读性风险保留供评审，不按空格或字数机械重切。
+
+`state.json` 记录连续切点、恢复情况和完成时间；`first-pass-summary.json` 汇总首窗等待、窗口耗时分位数及请求成本。`firstPassWindows` 是仅一次实际请求且无诊断的完整窗口；`firstPassCompleteWindows` 表示完整模型响应无需内容恢复，可能已发生输出截断重试。两者都不是语义准确率。`comparisonReport` 指向本次对照历史 E 的报告，续跑时生成新的对比目录以保留旧快照；试跑只覆盖部分原文时，未选范围不可比较。
+
+`steadyPlaybackLateWindows` 仅模拟首窗准备好后从头以原速连续播放，使用离线队列的真实完成时间。它不包含播放器渲染、缓存、网速变化或跳转调度；续跑数据也不能视为一次不间断播放的测量。浏览器实际首屏、预取及跳转需另行验证，实验不会改写扩展缓存。
+
+定位未收到 HTTP 响应的连接失败时，可在命令的脚本路径前增加 `--import ./scripts/eval/network-diagnostics.ts`。它仅向标准错误输出异常名称和底层错误码，不输出请求头或密钥；原异常仍交回评测入口处理。
+
+只验证本地解析或元数据修正时，可以用 `scripts/replay-first-pass.ts --from <完整首轮运行目录> --out <审计 JSON 路径>` 回放已保存响应，无需密钥或模型请求。它核对阶段提示词、字幕文本、范围和元数据；提示词变化或缺少阶段日志会产生差异，不能据此替代新提示词的真实模型实验。

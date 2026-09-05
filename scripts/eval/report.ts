@@ -1,8 +1,8 @@
 import { copyFile, mkdir, readFile, readdir, rename } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
-import { serializeSubtitles } from '../../src/domain/subtitle';
-import type { DisplayCue } from '../../src/domain/subtitle';
+import { serializeSubtitles } from '@cueweave/core/subtitle';
+import type { DisplayCue } from '@cueweave/core/subtitle';
 import { alignRuns, cueWarnings, summarize } from './analysis';
 import { copyReportFonts, hash, readRun, writeAtomic, writeJson } from './io';
 import { successfulCues } from './types';
@@ -46,7 +46,7 @@ function renderCues(cues: DisplayCue[], missing: boolean): string {
 
 function renderSummary(run: EvalRun, side: string): string {
   const stats = summarize(run);
-  return `<section class="summary"><h2>${side} · ${e(run.name)}</h2><p class="model">${e(run.identity.model)} <span class="muted">/ ${e(run.identity.mode)}</span></p><dl class="stats"><div><dt>成功窗口</dt><dd>${stats.successfulWindows}<small> / ${stats.windows}</small></dd></div><div><dt>首轮直接通过</dt><dd>${stats.firstPassWindows}</dd></div><div><dt>失败 / 未完成</dt><dd>${stats.failedWindows}<small> / ${stats.pendingWindows}</small></dd></div><div><dt>模型请求</dt><dd>${stats.requestCount}</dd></div></dl><p class="muted">词元缺失 ${stats.missingTokens} · 重复 ${stats.duplicatedTokens} · 范围外 ${stats.unexpectedTokens} · 降级 ${stats.fallbackEvents} · 待审阅字幕 ${stats.softWarningCues}</p><p class="muted">已记录请求耗时 ${(stats.requestDurationMs / 60000).toFixed(1)} 分钟 · 已报告 Token ${stats.reportedUsage?.total.toLocaleString() ?? '不可用'}${stats.usageMissingRequests ? `（${stats.usageMissingRequests} 次请求未报告用量）` : ''}</p><details><summary>配置与版本</summary><pre>${e(JSON.stringify({ status: run.status, ...run.identity, windowIds: `${run.windows.length} selected windows`, gitRevision: run.gitRevision, createdAt: run.createdAt, aliases: run.aliases }, null, 2))}</pre></details></section>`;
+  return `<section class="summary"><h2>${side} · ${e(run.name)}</h2><p class="model">${e(run.identity.model)} <span class="muted">/ ${e(run.identity.mode)}</span></p><dl class="stats"><div><dt>成功窗口</dt><dd>${stats.successfulWindows}<small> / ${stats.windows}</small></dd></div><div><dt>单请求直接通过</dt><dd>${stats.firstPassWindows}</dd></div><div><dt>失败 / 未完成</dt><dd>${stats.failedWindows}<small> / ${stats.pendingWindows}</small></dd></div><div><dt>模型请求</dt><dd>${stats.requestCount}</dd></div></dl><p class="muted">局部可用窗口 ${stats.partialWindows} · 词元缺失 ${stats.missingTokens} · 重复 ${stats.duplicatedTokens} · 范围外 ${stats.unexpectedTokens} · 降级 ${stats.fallbackEvents} · 待审阅字幕 ${stats.softWarningCues}</p><p class="muted">已记录请求耗时 ${(stats.requestDurationMs / 60000).toFixed(1)} 分钟 · 已报告 Token ${stats.reportedUsage?.total.toLocaleString() ?? '不可用'}${stats.usageMissingRequests ? `（${stats.usageMissingRequests} 次请求未报告用量）` : ''}</p><details><summary>配置与版本</summary><pre>${e(JSON.stringify({ status: run.status, ...run.identity, windowIds: `${run.windows.length} selected windows`, gitRevision: run.gitRevision, createdAt: run.createdAt, aliases: run.aliases }, null, 2))}</pre></details></section>`;
 }
 
 function renderLogs(run: EvalRun, prefix: string, side: string): string[] {

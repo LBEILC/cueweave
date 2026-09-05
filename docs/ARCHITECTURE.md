@@ -2,6 +2,8 @@
 
 本文档定义 CueWeave 的稳定模块边界、数据流和故障处理。产品功能与验收口径见[产品需求](PRODUCT_SPEC.md)，工程工具选型见[技术栈](TECH_STACK.md)。
 
+应用与共享包的物理目录、依赖方向和平台适配规则见[仓库结构](WORKSPACE.md)。以下运行上下文与存储说明适用于 `apps/extension`；字幕领域逻辑和模型传输由 `packages/core` 提供。桌面进程、媒体、任务和项目存储的要求见[桌面端开发规格](DESKTOP.md)。
+
 ## 数据流
 
 ```mermaid
@@ -67,7 +69,7 @@ Options 是以下设置的唯一完整入口：Provider、字幕行为、样式�
 
 ## 领域模型
 
-领域模型的唯一事实来源是 [`RawCue`、`TimedWord`、`SourceToken`、`SemanticSegment` 与 `DisplayCue`](../src/domain/subtitle/types.ts)。管线的公开入口由 [`src/domain/subtitle/index.ts`](../src/domain/subtitle/index.ts) 导出。
+领域模型的唯一事实来源是 [`RawCue`、`TimedWord`、`SourceToken`、`SemanticSegment` 与 `DisplayCue`](../packages/core/src/domain/subtitle/types.ts)。管线的公开入口由 [`packages/core/src/domain/subtitle/index.ts`](../packages/core/src/domain/subtitle/index.ts) 导出。
 
 `RawCue` 与 `TimedWord` 保存 YouTube 时间事实；`SourceToken` 是交给模型的最小连续覆盖单位；`SemanticSegment` 表示完整语义；`DisplayCue` 表示播放器、导出和阅读速度约束下的一次屏幕显示。`DisplayCue.originalText` 保留原始转录，`sourceText` 保存经过高置信度修正后用于显示的原文，`translation` 保存译文，三者不得相互覆盖。`TranscriptCorrection` 保存修正范围、前后文本、类别、置信度与应用状态；`TranslationTerm` 保存视频内稳定的双语术语。语义结构和显示结构不得合并为同一类型。
 

@@ -1,0 +1,56 @@
+appId: dev.cueweave.desktop
+productName: CueWeave
+copyright: Copyright © 2026 CueWeave contributors
+
+directories:
+  output: dist/package
+
+files:
+  - dist/main/**/*
+  - dist/preload/**/*
+  - dist/renderer/**/*
+  - package.json
+
+asar: true
+asarUnpack:
+  - node_modules/better-sqlite3/**/*
+
+extraResources:
+  - from: ../../node_modules/ffmpeg-static/ffmpeg.exe
+    to: tools/ffmpeg.exe
+  - from: ../../node_modules/@derhuerst/ffprobe-static/ffprobe.exe
+    to: tools/ffprobe.exe
+  - from: ../../node_modules/ffmpeg-static/ffmpeg.exe.LICENSE
+    to: tools/FFmpeg-GPL-3.0.txt
+  - from: ../../node_modules/ffmpeg-static/ffmpeg.exe.README
+    to: tools/FFmpeg-BUILD.txt
+  - from: resources/tools/manifest.json
+    to: tools/manifest.json
+  - from: resources/tools/bin/yt-dlp.exe
+    to: tools/yt-dlp.exe
+  - from: resources/tools/bin/deno.exe
+    to: tools/deno.exe
+  - from: resources/tools/bin/yt-dlp-SHA2-256SUMS.txt
+    to: tools/checksums/yt-dlp-SHA2-256SUMS.txt
+  - from: resources/tools/bin/deno.zip.sha256sum
+    to: tools/checksums/deno.zip.sha256sum
+  - from: resources/tools/licenses
+    to: tools/licenses
+  - from: ../../THIRD_PARTY_NOTICES.md
+    to: THIRD_PARTY_NOTICES.md
+
+win:
+  icon: resources/build/icon.ico
+  target:
+    - target: nsis
+      arch: [x64]
+  artifactName: CueWeave-${version}-${arch}.${ext}
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+
+publish: null
