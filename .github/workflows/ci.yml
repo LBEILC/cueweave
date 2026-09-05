@@ -4,6 +4,12 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
+    inputs:
+      build_installer:
+        description: Build and verify the Windows installer
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -60,20 +66,27 @@ jobs:
         run: npm run test:desktop:smoke
 
       - name: Build Windows installer
+        if: github.event_name == 'workflow_dispatch' && inputs.build_installer
         run: npm run dist:desktop
 
-      - name: Verify packaged subtitle projects
+      - name: Verify subtitle projects
         run: npm run test:desktop:project
         env:
-          CUEWEAVE_PROJECT_EXECUTABLE: ${{ github.workspace }}/apps/desktop/dist/package/win-unpacked/CueWeave.exe
+          CUEWEAVE_PROJECT_EXECUTABLE: ${{ github.event_name == 'workflow_dispatch' && inputs.build_installer && format('{0}/apps/desktop/dist/package/win-unpacked/CueWeave.exe', github.workspace) || '' }}
+
+      - name: Verify desktop settings
+        run: npm run test:desktop:settings
 
       - name: Verify unpacked application
+        if: github.event_name == 'workflow_dispatch' && inputs.build_installer
         run: npm run test:desktop:d0
 
       - name: Verify installer lifecycle
+        if: github.event_name == 'workflow_dispatch' && inputs.build_installer
         run: npm run test:desktop:installer
 
       - name: Upload desktop installer
+        if: github.event_name == 'workflow_dispatch' && inputs.build_installer
         uses: actions/upload-artifact@v7
         with:
           name: cueweave-desktop-windows-x64

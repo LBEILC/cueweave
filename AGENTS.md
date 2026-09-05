@@ -14,4 +14,6 @@
 
 ## Automated media checks
 
+- During rapid iteration, do not build installers unless the user explicitly requests one. Validate with development/production builds and silent app acceptance instead. Requested on 2026-09-05.
+
 - Run automated playback and acceptance tests with audio output muted. Preserve normal interactive playback volume; do not change the user's system volume. The user requested silent tests on 2026-09-05.

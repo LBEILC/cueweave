@@ -2,6 +2,7 @@ import { SelectControl } from './components/SelectControl';
 import {
   ArrowsOutIcon,
   InfoIcon,
+  GearSixIcon,
   PauseIcon,
   PlayIcon,
   SpeakerHighIcon,
@@ -20,6 +21,7 @@ import { SubtitlePanel, type SubtitleCue } from './components/SubtitlePanel';
 import { ProjectHeader, ProjectTools } from './components/ProjectTools';
 import { CueEditor } from './components/CueEditor';
 import { useProject } from './use-project';
+import { SettingsPage } from './components/SettingsPage';
 import type {
   AppInfo,
   LinkImportProgress,
@@ -40,6 +42,8 @@ const idlePlayer: PlayerState = {
 };
 
 export function App() {
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const settingsButtonRef = useRef<HTMLButtonElement>(null);
   const [about, setAbout] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [panelOpen, setPanelOpen] = useState(false);
@@ -226,7 +230,8 @@ export function App() {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if ((!asset && !onlinePlayback) || document.querySelector('dialog[open]')) return;
+      if (settingsOpen || (!asset && !onlinePlayback) || document.querySelector('dialog[open]'))
+        return;
       if (event.key === 'Escape' && panelOpen && !document.fullscreenElement) {
         if (projects.dirty) return;
         setPanelOpen(false);
@@ -249,6 +254,7 @@ export function App() {
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [
+    settingsOpen,
     asset,
     onlinePlayback,
     player.positionSeconds,
@@ -676,6 +682,7 @@ export function App() {
     <div
       className="app-shell"
       onDragEnter={(event) => {
+        if (settingsOpen) return;
         if (event.dataTransfer.types.includes('Files')) setDragging(true);
       }}
       onDragOver={(event) => event.preventDefault()}
@@ -686,6 +693,7 @@ export function App() {
       }}
       onDrop={(event) => {
         event.preventDefault();
+        if (settingsOpen) return;
         setDragging(false);
         void acceptFile(event.dataTransfer.files[0]);
       }}
@@ -696,7 +704,7 @@ export function App() {
           <strong>句织</strong>
           <span>CueWeave</span>
         </div>
-        <div className="header-actions">
+        <div className="header-actions" hidden={settingsOpen}>
           <ProjectHeader
             canCreate={Boolean(asset) && !linkJobId}
             hasProject={Boolean(project)}
@@ -718,6 +726,19 @@ export function App() {
             </button>
           )}
           <button
+            ref={settingsButtonRef}
+            type="button"
+            className="quiet-button"
+            onClick={() => {
+              videoRef.current?.pause();
+              audioRef.current?.pause();
+              setSettingsOpen(true);
+            }}
+          >
+            <GearSixIcon size={18} aria-hidden="true" />
+            设置
+          </button>
+          <button
             ref={aboutButtonRef}
             type="button"
             className="quiet-button"
@@ -729,7 +750,7 @@ export function App() {
           </button>
         </div>
       </header>
-      <main id="main-content" className="workspace">
+      <main id="main-content" className="workspace" hidden={settingsOpen}>
         {asset || onlinePlayback || project ? (
           <section
             ref={workspaceRef}
@@ -1101,6 +1122,14 @@ export function App() {
           </div>
         )}
       </main>
+      {settingsOpen && (
+        <SettingsPage
+          onClose={() => {
+            setSettingsOpen(false);
+            requestAnimationFrame(() => settingsButtonRef.current?.focus());
+          }}
+        />
+      )}
       <footer className="workspace-status">
         <span>
           {asset || onlinePlayback || project

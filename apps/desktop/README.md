@@ -8,6 +8,8 @@ Electron 桌面应用工作区。当前提供安全宿主、统一的 DOM 播放
 
 项目创建、字幕导入、编辑、撤销重做、关闭恢复和原文导出的范围见 [D1 实施与验收](../../docs/DESKTOP_D1.md)。
 
+顶栏设置提供浅色、深色、跟随系统，以及 AI 服务地址、模型、协议、加密密钥保存和连接测试。进入设置暂停播放，返回保留位置；设置独立于字幕项目。使用说明与安全边界见[桌面设置](../../docs/DESKTOP_SETTINGS.md)。翻译任务尚未接入。
+
 模块依赖规则见[仓库结构与依赖边界](../../docs/WORKSPACE.md)。依赖统一在仓库根目录安装，可用命令以本目录的 [package.json](package.json) 为准。
 
 ## 运行
@@ -41,12 +43,15 @@ npm run dist:desktop
 
 目录产物与安装包位于 `apps/desktop/dist/package/`。打包会针对 Electron x64 重新构建 `better-sqlite3`，并把清单中的 FFmpeg、ffprobe、yt-dlp 与 Deno 放入应用资源目录。
 
+快速迭代默认不打安装包，仅在用户明确要求时执行打包命令。日常 CI 验证源码、构建和功能；Windows 安装包需手动触发工作流并选择 `build_installer`。
+
 ## 验证
 
 ```bash
 npm run typecheck --workspace @cueweave/desktop
 npm run test:desktop:smoke
 npm run test:desktop:project
+npm run test:desktop:settings
 npm run pack:desktop
 npm run test:desktop:d0
 npm run test:desktop:links

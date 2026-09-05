@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
 import { DESKTOP_CHANNELS, desktopError } from '../shared/bridge';
 import type { ProjectReply } from '../shared/project';
+import type { SettingsReply } from '../shared/settings';
 import type {
   AppInfo,
   DesktopBridge,
@@ -15,6 +16,12 @@ import type {
 } from '../shared/bridge';
 
 const bridge: DesktopBridge = {
+  settingsCommand: (command) =>
+    (
+      ipcRenderer.invoke(DESKTOP_CHANNELS.settings, command) as Promise<
+        DesktopResult<SettingsReply>
+      >
+    ).catch(() => desktopError('UNAVAILABLE')),
   projectCommand: (command) =>
     (
       ipcRenderer.invoke(DESKTOP_CHANNELS.project, command) as Promise<DesktopResult<ProjectReply>>

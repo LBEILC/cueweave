@@ -1,5 +1,7 @@
 import type { ProjectCommand, ProjectReply } from './project';
+import type { SettingsCommand, SettingsReply } from './settings';
 export const DESKTOP_CHANNELS = {
+  settings: 'cueweave:settings:command',
   project: 'cueweave:project:command',
   appInfo: 'cueweave:app:info',
   fontLicense: 'cueweave:app:font-license',
@@ -122,6 +124,7 @@ export type LinkImportEvent =
   | { type: 'failed'; jobId: string; code: DesktopErrorCode; message: string };
 
 export type DesktopErrorCode =
+  | 'SETTINGS_ERROR'
   | 'PROJECT_ERROR'
   | 'INVALID_REQUEST'
   | 'FORBIDDEN'
@@ -144,6 +147,7 @@ export type DesktopResult<T> =
     };
 
 export interface DesktopBridge {
+  settingsCommand: (command: SettingsCommand) => Promise<DesktopResult<SettingsReply>>;
   projectCommand: (command: ProjectCommand) => Promise<DesktopResult<ProjectReply>>;
   getAppInfo: () => Promise<DesktopResult<AppInfo>>;
   openFontLicense: () => Promise<DesktopResult<null>>;
@@ -177,6 +181,7 @@ export function isEmptyRequest(value: unknown): value is Record<string, never> {
 
 export function desktopError(code: DesktopErrorCode): DesktopResult<never> {
   const messages = {
+    SETTINGS_ERROR: '设置操作未完成，请重试。',
     PROJECT_ERROR: '项目操作未完成，请重试。',
     INVALID_REQUEST: '请求格式不正确，请重新打开窗口。',
     FORBIDDEN: '当前页面无法访问桌面功能，请重新打开应用。',

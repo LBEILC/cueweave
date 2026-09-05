@@ -151,6 +151,7 @@ async function check(mode, rendererUrl) {
         'probeMedia',
         'projectCommand',
         'registerDroppedMedia',
+        'settingsCommand',
         'startLinkImport',
       ],
       require: 'undefined',
@@ -382,6 +383,21 @@ async function check(mode, rendererUrl) {
         .getByRole('button', { name: '关于', exact: true })
         .evaluate((element) => element === document.activeElement),
       true,
+    );
+    await page.getByRole('button', { name: '设置', exact: true }).click();
+    await page.getByRole('button', { name: '跟随系统', exact: true }).waitFor();
+    await page.getByRole('button', { name: '返回工作台', exact: true }).click();
+    assert.equal(
+      await page.locator('video').evaluate((video) => video.dataset.continuity),
+      'same-element',
+    );
+    assert.ok(
+      await page.locator('video').evaluate((video) => video.paused && video.currentTime >= 1.8),
+    );
+    assert.ok(
+      await page
+        .getByRole('button', { name: '设置', exact: true })
+        .evaluate((element) => element === document.activeElement),
     );
     const windowCount = (await application.windows()).length;
     await page.evaluate(() => window.open('https://example.invalid/'));

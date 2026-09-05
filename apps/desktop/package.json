@@ -19,7 +19,8 @@
     "dist:win": "npm run build && electron-builder --win --x64",
     "test:d0": "node scripts/d0-acceptance.mjs",
     "test:links": "node scripts/link-acceptance.mjs",
-    "test:installer": "node scripts/installer-acceptance.mjs"
+    "test:installer": "node scripts/installer-acceptance.mjs",
+    "test:settings": "npm run build && node scripts/settings-acceptance.mjs"
   },
   "dependencies": {
     "@cueweave/core": "0.1.0",

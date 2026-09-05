@@ -8,12 +8,15 @@ import {
   protocol,
   screen,
   session,
+  safeStorage,
 } from 'electron';
 import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { registerAppIpc } from './ipc';
 import { registerProjectIpc } from './project-ipc';
+import { SettingsStore } from './settings-store';
+import { registerSettingsIpc } from './settings-ipc';
 import { contentSecurityPolicy, getRendererUrl, resolveAppAsset } from './security';
 import { MediaRegistry } from './media';
 import { DesktopServiceHost } from './service-host';
@@ -170,6 +173,19 @@ app
     }
 
     Menu.setApplicationMenu(null);
+    const settingsStore = new SettingsStore(join(app.getPath('userData'), 'settings.json'), {
+      isEncryptionAvailable: () =>
+        safeStorage.isEncryptionAvailable() &&
+        (process.platform !== 'linux' || safeStorage.getSelectedStorageBackend() !== 'basic_text'),
+      encryptString: (value) => safeStorage.encryptString(value),
+      decryptString: (value) => safeStorage.decryptString(value),
+    });
+    let settingsLoadError: string | undefined;
+    try {
+      nativeTheme.themeSource = (await settingsStore.load()).theme;
+    } catch (error) {
+      settingsLoadError = error instanceof Error ? error.message : '无法读取设置。';
+    }
     const windowStatePath = join(app.getPath('userData'), 'window-state.json');
     const workArea = screen.getPrimaryDisplay().workAreaSize;
     let savedSize = { width: 1280, height: 820 };
@@ -229,6 +245,12 @@ app
     window.webContents.on('will-frame-navigate', (details) => details.preventDefault());
     window.webContents.on('will-attach-webview', (event) => event.preventDefault());
     const auth = new SiteAuthManager(hidden);
+    const disposeSettingsIpc = registerSettingsIpc({
+      window,
+      rendererUrl,
+      store: settingsStore,
+      loadError: settingsLoadError,
+    });
     const disposeProjectIpc = registerProjectIpc({ window, rendererUrl, media, service });
     const disposeIpc = registerAppIpc({
       window,
@@ -251,6 +273,10 @@ app
       if (closingWindow) return;
       closingWindow = true;
       void (async () => {
+        if (!(await disposeSettingsIpc.beforeClose())) {
+          closingWindow = false;
+          return;
+        }
         if (!(await disposeProjectIpc.beforeClose().catch(() => true))) {
           closingWindow = false;
           return;
@@ -266,6 +292,7 @@ app
       })();
     });
     window.on('closed', () => {
+      disposeSettingsIpc();
       disposeProjectIpc.dispose();
       auth.dispose();
       disposeIpc();
