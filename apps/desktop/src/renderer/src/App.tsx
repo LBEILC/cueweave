@@ -1,11 +1,6 @@
 import {
-  ArrowLeftIcon,
-  ArrowSquareOutIcon,
   ArrowsOutIcon,
-  FilmSlateIcon,
   InfoIcon,
-  LinkIcon,
-  DownloadSimpleIcon,
   PauseIcon,
   PlayIcon,
   SpeakerHighIcon,
@@ -13,86 +8,23 @@ import {
   SpinnerGapIcon,
   SubtitlesIcon,
   UploadSimpleIcon,
-  UserCircleIcon,
-  XIcon,
 } from '@phosphor-icons/react';
 import { useEffect, useRef, useState } from 'react';
+import { AboutContent } from './components/AboutContent';
+import { MediaImport } from './components/MediaImport';
+import { formatBytes, formatDuration, loginSiteFromLink, parseSubtitle } from './media-display';
+export { loginSiteFromLink, parseSubtitle } from './media-display';
+import { WorkspaceDialog } from './components/WorkspaceDialog';
+import { SubtitlePanel, type SubtitleCue } from './components/SubtitlePanel';
 import type {
   AppInfo,
   LinkImportProgress,
   LinkPreview,
-  LoginSite,
   MediaAsset,
   MediaProbe,
   PlayerState,
   SiteAuthMode,
 } from '../../shared/bridge';
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
-  return `${(bytes / 1024 / 1024).toFixed(bytes >= 100 * 1024 * 1024 ? 0 : 1)} MB`;
-}
-
-function formatDuration(seconds: number | undefined): string {
-  if (seconds === undefined) return '时长未知';
-  const minutes = Math.floor(seconds / 60);
-  const rest = Math.floor(seconds % 60);
-  return `${minutes}:${rest.toString().padStart(2, '0')}`;
-}
-
-export function loginSiteFromLink(rawUrl: string): LoginSite | null {
-  try {
-    const hostname = new URL(rawUrl).hostname.replace(/^www\./, '').toLowerCase();
-    if (hostname === 'youtube.com' || hostname.endsWith('.youtube.com') || hostname === 'youtu.be')
-      return 'youtube';
-    if (hostname === 'bilibili.com' || hostname.endsWith('.bilibili.com')) return 'bilibili';
-    return null;
-  } catch {
-    return null;
-  }
-}
-
-function loginSiteName(site: LoginSite): string {
-  return site === 'youtube' ? 'YouTube' : '哔哩哔哩';
-}
-
-interface SubtitleCue {
-  start: number;
-  end: number;
-  text: string;
-}
-
-function subtitleTime(value: string): number | null {
-  const parts = value.trim().replace(',', '.').split(':').map(Number);
-  if ((parts.length !== 2 && parts.length !== 3) || parts.some((part) => !Number.isFinite(part)))
-    return null;
-  const [hours, minutes, seconds] = parts.length === 3 ? parts : [0, parts[0], parts[1]];
-  if (hours === undefined || minutes === undefined || seconds === undefined) return null;
-  return hours * 3600 + minutes * 60 + seconds;
-}
-
-export function parseSubtitle(content: string): SubtitleCue[] {
-  const blocks = content
-    .replace(/\r\n?/g, '\n')
-    .trim()
-    .split(/\n{2,}/);
-  const cues: SubtitleCue[] = [];
-  for (const block of blocks) {
-    const lines = block.split('\n');
-    const timingIndex = lines.findIndex((line) => line.includes('-->'));
-    if (timingIndex < 0) continue;
-    const match = /^\s*([^\s]+)\s*-->\s*([^\s]+)/.exec(lines[timingIndex] ?? '');
-    const start = match?.[1] ? subtitleTime(match[1]) : null;
-    const end = match?.[2] ? subtitleTime(match[2]) : null;
-    const text = lines
-      .slice(timingIndex + 1)
-      .join('\n')
-      .replace(/<[^>]+>/g, '')
-      .trim();
-    if (start !== null && end !== null && end > start && text) cues.push({ start, end, text });
-  }
-  return cues.sort((left, right) => left.start - right.start);
-}
 
 const idlePlayer: PlayerState = {
   phase: 'idle',
@@ -105,6 +37,8 @@ const idlePlayer: PlayerState = {
 
 export function App() {
   const [about, setAbout] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+  const [panelOpen, setPanelOpen] = useState(false);
   const [info, setInfo] = useState<AppInfo | null>(null);
   const [asset, setAsset] = useState<MediaAsset | null>(null);
   const [probe, setProbe] = useState<MediaProbe | null>(null);
@@ -132,8 +66,8 @@ export function App() {
   const [selectedVariantId, setSelectedVariantId] = useState('');
   const [selectedOnlineSubtitleId, setSelectedOnlineSubtitleId] = useState('');
   const [onlineSubtitleLoading, setOnlineSubtitleLoading] = useState(false);
-  const titleRef = useRef<HTMLHeadingElement>(null);
   const aboutButtonRef = useRef<HTMLButtonElement>(null);
+  const subtitleButtonRef = useRef<HTMLButtonElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const workspaceRef = useRef<HTMLElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -163,7 +97,6 @@ export function App() {
 
   useEffect(() => {
     if (about) {
-      titleRef.current?.focus();
       void loadInfo();
     }
   }, [about]);
@@ -190,6 +123,7 @@ export function App() {
         }
         if (event.type === 'completed') {
           if (event.jobId !== linkJobRef.current) return;
+          setImportOpen(false);
           setAsset(event.asset);
           setOnlinePlayback(null);
           setProbe(event.probe);
@@ -212,7 +146,7 @@ export function App() {
   useEffect(() => {
     const video = videoRef.current;
     const audio = audioRef.current;
-    if (about || !videoUrl || !video) {
+    if (!videoUrl || !video) {
       setPlayer(idlePlayer);
       return;
     }
@@ -248,7 +182,7 @@ export function App() {
       video.pause();
       audio?.pause();
     };
-  }, [about, videoUrl, audioUrl]);
+  }, [videoUrl, audioUrl]);
 
   useEffect(() => {
     const changed = () => setFullscreen(Boolean(document.fullscreenElement));
@@ -258,9 +192,14 @@ export function App() {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (!asset && !onlinePlayback) return;
+      if ((!asset && !onlinePlayback) || document.querySelector('dialog[open]')) return;
+      if (event.key === 'Escape' && panelOpen && !document.fullscreenElement) {
+        setPanelOpen(false);
+        subtitleButtonRef.current?.focus();
+        return;
+      }
       const target = event.target as HTMLElement | null;
-      if (target?.matches('input, select, textarea, button')) return;
+      if (target?.closest('input, select, textarea, button, [contenteditable=true]')) return;
       if (event.key === ' ') {
         event.preventDefault();
         void togglePause();
@@ -274,7 +213,14 @@ export function App() {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [asset, onlinePlayback, player.positionSeconds, player.durationSeconds, fullscreen]);
+  }, [
+    asset,
+    onlinePlayback,
+    player.positionSeconds,
+    player.durationSeconds,
+    fullscreen,
+    panelOpen,
+  ]);
 
   async function inspect(nextAsset: MediaAsset) {
     const result = await window.cueweave.probeMedia(nextAsset.id);
@@ -293,6 +239,7 @@ export function App() {
         setError(result.error.message);
         return;
       }
+      setImportOpen(false);
       setAsset(result.value);
       setOnlinePlayback(null);
       setMediaOrigin('local');
@@ -315,6 +262,7 @@ export function App() {
       }
       if (!result.value) return;
       setProbe(null);
+      setImportOpen(false);
       setAsset(result.value);
       setOnlinePlayback(null);
       setMediaOrigin('local');
@@ -406,6 +354,7 @@ export function App() {
     setSelectedVariantId(linkPreview.playback.defaultVariantId);
     setSelectedOnlineSubtitleId('');
     setSubtitleCues([]);
+    setImportOpen(false);
     setOnlinePlayback(linkPreview);
     setMediaOrigin('network');
     setError('');
@@ -544,6 +493,7 @@ export function App() {
         setError('所选在线字幕没有可用内容。');
         return;
       }
+      setPanelOpen(true);
       setSubtitleCues(cues);
       setPlayer((current) => ({
         ...current,
@@ -571,6 +521,7 @@ export function App() {
       setError('没有在字幕文件中找到可用的字幕。');
       return;
     }
+    setPanelOpen(true);
     setSubtitleCues(cues);
     setSelectedOnlineSubtitleId('');
     setPlayer((current) => ({
@@ -590,6 +541,86 @@ export function App() {
     (cue) => subtitleTimePosition >= cue.start && subtitleTimePosition <= cue.end,
   )?.text;
 
+  const subtitleTools = (
+    <>
+      {playback && playback.subtitles.length > 0 && (
+        <label>
+          在线字幕
+          <select
+            aria-label="在线字幕"
+            value={selectedOnlineSubtitleId}
+            disabled={onlineSubtitleLoading}
+            onChange={(event) => void loadOnlineSubtitle(event.target.value)}
+          >
+            <option value="">{onlineSubtitleLoading ? '正在加载…' : '关闭在线字幕'}</option>
+            {playback.subtitles.map((subtitle) => (
+              <option key={subtitle.id} value={subtitle.id}>
+                {subtitle.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+      <button type="button" className="quiet-button" onClick={() => void pickSubtitle()}>
+        <SubtitlesIcon size={18} aria-hidden="true" />
+        {player.subtitleName ? '更换字幕文件' : '加载字幕'}
+      </button>
+      {player.subtitleName && (
+        <label>
+          字幕偏移
+          <select
+            value={player.subtitleDelaySeconds}
+            onChange={(event) => setSubtitleDelay(Number(event.target.value))}
+          >
+            <option value="-1">提前 1 秒</option>
+            <option value="-0.5">提前 0.5 秒</option>
+            <option value="0">无偏移</option>
+            <option value="0.5">延后 0.5 秒</option>
+            <option value="1">延后 1 秒</option>
+          </select>
+        </label>
+      )}
+    </>
+  );
+  const aboutContent = (
+    <AboutContent
+      info={info}
+      loading={loading}
+      error={error}
+      openingLicense={openingLicense}
+      openLicense={openLicense}
+      loadInfo={loadInfo}
+    />
+  );
+  const importContent = (
+    <MediaImport
+      loading={loading}
+      dragging={dragging}
+      linkUrl={linkUrl}
+      linkPreview={linkPreview}
+      linkJobId={linkJobId}
+      linkProgress={linkProgress}
+      inspectingLink={inspectingLink}
+      authMode={authMode}
+      siteSignedIn={siteSignedIn}
+      openingLogin={openingLogin}
+      clearingLogin={clearingLogin}
+      currentLoginSite={currentLoginSite}
+      error={error}
+      pickMedia={pickMedia}
+      acceptFile={acceptFile}
+      inspectVideoLink={inspectVideoLink}
+      setLinkUrl={setLinkUrl}
+      setLinkPreview={setLinkPreview}
+      setError={setError}
+      setAuthMode={setAuthMode}
+      openSiteLogin={openSiteLogin}
+      clearSiteLogin={clearSiteLogin}
+      startLinkPlayback={startLinkPlayback}
+      startLinkImport={startLinkImport}
+      cancelLinkImport={cancelLinkImport}
+    />
+  );
   return (
     <div
       className="app-shell"
@@ -614,87 +645,27 @@ export function App() {
           <strong>句织</strong>
           <span>CueWeave</span>
         </div>
-        <button
-          ref={aboutButtonRef}
-          type="button"
-          className="quiet-button"
-          aria-pressed={about}
-          onClick={() => setAbout(true)}
-        >
-          <InfoIcon size={18} aria-hidden="true" />
-          关于
-        </button>
-      </header>
-      <main id="main-content" className={about ? 'about-page' : 'workspace'}>
-        {about ? (
-          <>
-            <button type="button" className="quiet-button back-button" onClick={goBack}>
-              <ArrowLeftIcon size={18} aria-hidden="true" />
-              返回工作台
+        <div className="header-actions">
+          {(asset || onlinePlayback) && (
+            <button type="button" className="quiet-button" onClick={() => setImportOpen(true)}>
+              <UploadSimpleIcon size={18} aria-hidden="true" />
+              打开其他视频
             </button>
-            <h1 ref={titleRef} tabIndex={-1}>
-              关于句织
-            </h1>
-            <p className="about-intro">CueWeave · 字幕工作台</p>
-            <dl className="app-info" aria-busy={loading}>
-              <div>
-                <dt>版本</dt>
-                <dd>{info?.version ?? (loading ? '正在读取…' : '未能读取')}</dd>
-              </div>
-              <div>
-                <dt>软件许可</dt>
-                <dd>MIT</dd>
-              </div>
-            </dl>
-            <section aria-labelledby="third-party-title" className="notices">
-              <h2 id="third-party-title">第三方声明</h2>
-              <p>
-                MiSans 字体
-                <br />
-                <span>Copyright Xiaomi Technology Co., Ltd.</span>
-              </p>
-              <button
-                type="button"
-                className="text-button"
-                disabled={openingLicense}
-                onClick={() => void openLicense()}
-              >
-                {openingLicense ? '正在打开…' : '阅读 MiSans 字体许可'}
-                <ArrowSquareOutIcon size={16} aria-hidden="true" />
-              </button>
-              <p>
-                FFmpeg 与 ffprobe
-                <br />
-                <span>GNU General Public License v3</span>
-              </p>
-              <p>
-                yt-dlp
-                <br />
-                <span>Unlicense · 随包组件许可证见安装目录</span>
-              </p>
-              <p>
-                Deno
-                <br />
-                <span>Copyright 2018–2026 the Deno authors · MIT</span>
-              </p>
-              <p>
-                Phosphor Icons
-                <br />
-                <span>Copyright © 2020 Phosphor Icons · MIT</span>
-              </p>
-            </section>
-            {error && (
-              <div className="error-message" role="alert">
-                <p>{error}</p>
-                {!info && (
-                  <button type="button" disabled={loading} onClick={() => void loadInfo()}>
-                    重新读取
-                  </button>
-                )}
-              </div>
-            )}
-          </>
-        ) : asset || onlinePlayback ? (
+          )}
+          <button
+            ref={aboutButtonRef}
+            type="button"
+            className="quiet-button"
+            aria-pressed={about}
+            onClick={() => setAbout(true)}
+          >
+            <InfoIcon size={18} aria-hidden="true" />
+            关于
+          </button>
+        </div>
+      </header>
+      <main id="main-content" className="workspace">
+        {asset || onlinePlayback ? (
           <section
             ref={workspaceRef}
             className={`player-workspace${fullscreen ? ' is-fullscreen' : ''}`}
@@ -709,7 +680,9 @@ export function App() {
                       ? '链接视频'
                       : '本地视频'}
                 </p>
-                <h1 id="media-title">{onlinePlayback?.title ?? asset?.name}</h1>
+                <h1 id="media-title" title={onlinePlayback?.title ?? asset?.name}>
+                  {onlinePlayback?.title ?? asset?.name}
+                </h1>
                 <p className="media-meta">
                   {onlinePlayback ? (
                     <>
@@ -731,15 +704,14 @@ export function App() {
               </div>
               <button
                 type="button"
-                className="secondary-button"
-                onClick={() => {
-                  setAsset(null);
-                  setOnlinePlayback(null);
-                  setProbe(null);
-                  setError('');
-                }}
+                className="quiet-button"
+                ref={subtitleButtonRef}
+                aria-expanded={panelOpen}
+                aria-controls="subtitle-panel"
+                onClick={() => setPanelOpen(!panelOpen)}
               >
-                打开其他视频
+                <SubtitlesIcon size={18} aria-hidden="true" />
+                字幕
               </button>
               <label className="file-input-label">
                 从文件选择器更换
@@ -751,106 +723,126 @@ export function App() {
                 />
               </label>
             </div>
-            <div ref={stageRef} className="video-stage" aria-label="视频画面">
-              <video
-                ref={videoRef}
-                src={videoUrl}
-                autoPlay
-                playsInline
-                preload="auto"
-                muted={Boolean(audioUrl) || player.muted}
-                onLoadedMetadata={(event) => {
-                  const duration = event.currentTarget.duration;
-                  setPlayer((current) => ({
-                    ...current,
-                    ...(Number.isFinite(duration) && duration > 0
-                      ? { durationSeconds: duration }
-                      : {}),
-                  }));
-                  const resume = qualityResumeRef.current;
-                  if (resume) {
-                    const position = Number.isFinite(duration)
-                      ? Math.min(resume.positionSeconds, duration)
-                      : resume.positionSeconds;
-                    event.currentTarget.currentTime = position;
-                    if (audioRef.current) audioRef.current.currentTime = position;
-                    qualityResumeRef.current = null;
-                    if (resume.paused) event.currentTarget.pause();
-                    else void event.currentTarget.play().catch(() => {});
-                  }
-                  syncAudio(true);
-                }}
-                onDurationChange={(event) => {
-                  const duration = event.currentTarget.duration;
-                  if (Number.isFinite(duration) && duration > 0)
-                    setPlayer((current) => ({ ...current, durationSeconds: duration }));
-                }}
-                onTimeUpdate={(event) => {
-                  const positionSeconds = event.currentTarget.currentTime;
-                  setPlayer((current) => ({ ...current, positionSeconds }));
-                  syncAudio();
-                }}
-                onPlaying={() => {
-                  setPlayer((current) => {
-                    const next: PlayerState = { ...current, phase: 'playing' };
-                    delete next.error;
-                    return next;
-                  });
-                  syncAudio(true);
-                }}
-                onPause={() => {
-                  audioRef.current?.pause();
-                  setPlayer((current) => ({
-                    ...current,
-                    phase: videoRef.current?.ended ? 'ended' : 'paused',
-                  }));
-                }}
-                onWaiting={() => {
-                  audioRef.current?.pause();
-                  setPlayer((current) => ({ ...current, phase: 'loading' }));
-                }}
-                onSeeking={() => syncAudio(true)}
-                onSeeked={() => syncAudio(true)}
-                onEnded={() => {
-                  audioRef.current?.pause();
-                  setPlayer((current) => ({ ...current, phase: 'ended' }));
-                }}
-                onError={() =>
-                  setPlayer((current) => ({
-                    ...current,
-                    phase: 'error',
-                    error: '视频流加载失败，请检查网络后重试。',
-                  }))
-                }
-              />
-              {audioUrl && (
-                <audio
-                  ref={audioRef}
-                  src={audioUrl}
-                  autoPlay
-                  preload="auto"
-                  muted={player.muted}
-                  aria-hidden="true"
-                  onCanPlay={() => syncAudio()}
-                  onError={() =>
-                    setPlayer((current) => ({
-                      ...current,
-                      phase: 'error',
-                      error: '音频流加载失败，请检查网络后重试。',
-                    }))
-                  }
-                />
-              )}
-              {visibleSubtitle && <div className="subtitle-overlay">{visibleSubtitle}</div>}
-              <div className="player-status" role="status" aria-live="polite">
-                {player.phase === 'loading' && (
-                  <>
-                    <SpinnerGapIcon size={26} className="spin" aria-hidden="true" />
-                    <span>正在准备播放…</span>
-                  </>
-                )}
-                {player.phase === 'error' && <span>{player.error ?? '播放器未能加载视频。'}</span>}
+            <div className={`workspace-body${panelOpen ? ' has-panel' : ''}`}>
+              <div className="playback-column">
+                <div ref={stageRef} className="video-stage" aria-label="视频画面">
+                  <video
+                    ref={videoRef}
+                    src={videoUrl}
+                    autoPlay
+                    playsInline
+                    preload="auto"
+                    muted={Boolean(audioUrl) || player.muted}
+                    onLoadedMetadata={(event) => {
+                      const duration = event.currentTarget.duration;
+                      setPlayer((current) => ({
+                        ...current,
+                        ...(Number.isFinite(duration) && duration > 0
+                          ? { durationSeconds: duration }
+                          : {}),
+                      }));
+                      const resume = qualityResumeRef.current;
+                      if (resume) {
+                        const position = Number.isFinite(duration)
+                          ? Math.min(resume.positionSeconds, duration)
+                          : resume.positionSeconds;
+                        event.currentTarget.currentTime = position;
+                        if (audioRef.current) audioRef.current.currentTime = position;
+                        qualityResumeRef.current = null;
+                        if (resume.paused) event.currentTarget.pause();
+                        else void event.currentTarget.play().catch(() => {});
+                      }
+                      syncAudio(true);
+                    }}
+                    onDurationChange={(event) => {
+                      const duration = event.currentTarget.duration;
+                      if (Number.isFinite(duration) && duration > 0)
+                        setPlayer((current) => ({ ...current, durationSeconds: duration }));
+                    }}
+                    onTimeUpdate={(event) => {
+                      const positionSeconds = event.currentTarget.currentTime;
+                      setPlayer((current) => ({ ...current, positionSeconds }));
+                      syncAudio();
+                    }}
+                    onPlaying={() => {
+                      setPlayer((current) => {
+                        const next: PlayerState = { ...current, phase: 'playing' };
+                        delete next.error;
+                        return next;
+                      });
+                      syncAudio(true);
+                    }}
+                    onPause={() => {
+                      audioRef.current?.pause();
+                      setPlayer((current) => ({
+                        ...current,
+                        phase: videoRef.current?.ended ? 'ended' : 'paused',
+                      }));
+                    }}
+                    onWaiting={() => {
+                      audioRef.current?.pause();
+                      setPlayer((current) => ({ ...current, phase: 'loading' }));
+                    }}
+                    onSeeking={() => syncAudio(true)}
+                    onSeeked={() => syncAudio(true)}
+                    onEnded={() => {
+                      audioRef.current?.pause();
+                      setPlayer((current) => ({ ...current, phase: 'ended' }));
+                    }}
+                    onError={() =>
+                      setPlayer((current) => ({
+                        ...current,
+                        phase: 'error',
+                        error: '视频流加载失败，请检查网络后重试。',
+                      }))
+                    }
+                  />
+                  {audioUrl && (
+                    <audio
+                      ref={audioRef}
+                      src={audioUrl}
+                      autoPlay
+                      preload="auto"
+                      muted={player.muted}
+                      aria-hidden="true"
+                      onCanPlay={() => syncAudio()}
+                      onError={() =>
+                        setPlayer((current) => ({
+                          ...current,
+                          phase: 'error',
+                          error: '音频流加载失败，请检查网络后重试。',
+                        }))
+                      }
+                    />
+                  )}
+                  {visibleSubtitle && <div className="subtitle-overlay">{visibleSubtitle}</div>}
+                  <div className="player-status" role="status" aria-live="polite">
+                    {player.phase === 'loading' && (
+                      <>
+                        <SpinnerGapIcon size={26} className="spin" aria-hidden="true" />
+                        <span>正在准备播放…</span>
+                      </>
+                    )}
+                    {player.phase === 'error' && (
+                      <span>{player.error ?? '播放器未能加载视频。'}</span>
+                    )}
+                  </div>
+                </div>
               </div>
+              {panelOpen && (
+                <SubtitlePanel
+                  cues={subtitleCues}
+                  name={player.subtitleName}
+                  position={subtitleTimePosition}
+                  onSeek={(seconds) => seekTo(seconds + player.subtitleDelaySeconds)}
+                  onClose={() => {
+                    setPanelOpen(false);
+                    subtitleButtonRef.current?.focus();
+                  }}
+                >
+                  {subtitleTools}
+                </SubtitlePanel>
+              )}
             </div>
             <div className="player-controls">
               <div className="transport-row">
@@ -942,51 +934,6 @@ export function App() {
                       <option value="2">2×</option>
                     </select>
                   </label>
-                  {playback && playback.subtitles.length > 0 && (
-                    <label>
-                      在线字幕
-                      <select
-                        aria-label="在线字幕"
-                        value={selectedOnlineSubtitleId}
-                        disabled={onlineSubtitleLoading}
-                        onChange={(event) => void loadOnlineSubtitle(event.target.value)}
-                      >
-                        <option value="">
-                          {onlineSubtitleLoading ? '正在加载…' : '关闭在线字幕'}
-                        </option>
-                        {playback.subtitles.map((subtitle) => (
-                          <option key={subtitle.id} value={subtitle.id}>
-                            {subtitle.label}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  )}
-                  <button
-                    type="button"
-                    className="quiet-button"
-                    onClick={() => void pickSubtitle()}
-                  >
-                    <SubtitlesIcon size={18} aria-hidden="true" />
-                    {selectedOnlineSubtitleId
-                      ? '加载本地字幕'
-                      : (player.subtitleName ?? '加载字幕')}
-                  </button>
-                  {player.subtitleName && (
-                    <label>
-                      字幕偏移
-                      <select
-                        value={player.subtitleDelaySeconds}
-                        onChange={(event) => setSubtitleDelay(Number(event.target.value))}
-                      >
-                        <option value="-1">提前 1 秒</option>
-                        <option value="-0.5">提前 0.5 秒</option>
-                        <option value="0">无偏移</option>
-                        <option value="0.5">延后 0.5 秒</option>
-                        <option value="1">延后 1 秒</option>
-                      </select>
-                    </label>
-                  )}
                 </div>
                 <button type="button" className="quiet-button" onClick={toggleFullscreen}>
                   <ArrowsOutIcon size={18} aria-hidden="true" />
@@ -1001,206 +948,42 @@ export function App() {
             )}
           </section>
         ) : (
-          <section
-            className={`workspace-empty${dragging ? ' is-dragging' : ''}`}
-            aria-labelledby="workspace-title"
-          >
-            <div className="empty-icon" aria-hidden="true">
-              {loading ? (
-                <SpinnerGapIcon size={30} className="spin" />
-              ) : (
-                <FilmSlateIcon size={30} />
-              )}
-            </div>
-            <p className="eyebrow">字幕工作台</p>
-            <h1 id="workspace-title">打开一个视频开始工作</h1>
-            <p className="empty-description">
-              可打开 MP4、WebM、MOV、MKV 和 AVI；能否直接播放取决于文件编码。也可以把文件拖到这里。
-            </p>
-            <button
-              type="button"
-              className="primary-button"
-              disabled={loading}
-              onClick={() => void pickMedia()}
-            >
-              <UploadSimpleIcon size={18} weight="bold" aria-hidden="true" />
-              {loading ? '正在打开…' : '打开视频'}
-            </button>
-            <label className="file-input-label">
-              从文件选择器打开
-              <input
-                type="file"
-                accept="video/*,.mkv,.avi"
-                aria-label="选择视频文件"
-                onChange={(event) => void acceptFile(event.target.files?.[0])}
-              />
-            </label>
-            <div className="import-divider">
-              <span>或</span>
-            </div>
-            <form
-              className="link-import"
-              onSubmit={(event) => {
-                event.preventDefault();
-                void inspectVideoLink();
-              }}
-            >
-              <label htmlFor="video-link">视频链接</label>
-              <div className="link-input-row">
-                <div className="link-input-wrap">
-                  <LinkIcon size={18} aria-hidden="true" />
-                  <input
-                    id="video-link"
-                    type="url"
-                    value={linkUrl}
-                    disabled={Boolean(linkJobId)}
-                    placeholder="粘贴视频直链、YouTube 或哔哩哔哩单视频链接"
-                    autoComplete="off"
-                    onChange={(event) => {
-                      setLinkUrl(event.target.value);
-                      setLinkPreview(null);
-                      setError('');
-                    }}
-                  />
-                </div>
-                <button
-                  type="submit"
-                  className="secondary-button"
-                  disabled={inspectingLink || Boolean(linkJobId)}
-                >
-                  {inspectingLink ? '正在读取…' : '读取链接'}
-                </button>
-              </div>
-              <div className="login-source">
-                <label htmlFor="login-source">网站账号</label>
-                <select
-                  id="login-source"
-                  value={authMode}
-                  disabled={inspectingLink || Boolean(linkJobId)}
-                  onChange={(event) => {
-                    setAuthMode(event.target.value as SiteAuthMode);
-                    setLinkPreview(null);
-                    setError('');
-                  }}
-                >
-                  <option value="none">不使用登录</option>
-                  <option value="app">使用句织登录</option>
-                </select>
-                {authMode === 'none' ? (
-                  <span>公开内容会直接读取。</span>
-                ) : currentLoginSite ? (
-                  <div className="account-actions">
-                    <span
-                      className={siteSignedIn ? 'account-status is-signed-in' : 'account-status'}
-                    >
-                      {siteSignedIn === null
-                        ? '正在检查登录状态…'
-                        : siteSignedIn
-                          ? `已登录 · ${loginSiteName(currentLoginSite)}`
-                          : `未登录 · ${loginSiteName(currentLoginSite)}`}
-                    </span>
-                    <button
-                      type="button"
-                      className="quiet-button account-button"
-                      disabled={openingLogin || clearingLogin || Boolean(linkJobId)}
-                      onClick={() => void openSiteLogin()}
-                    >
-                      <UserCircleIcon size={17} aria-hidden="true" />
-                      {openingLogin ? '登录窗口已打开' : siteSignedIn ? '重新登录' : '打开登录窗口'}
-                    </button>
-                    {siteSignedIn && (
-                      <button
-                        type="button"
-                        className="text-button account-clear"
-                        disabled={clearingLogin || openingLogin}
-                        onClick={() => void clearSiteLogin()}
-                      >
-                        {clearingLogin ? '正在清除…' : '清除登录'}
-                      </button>
-                    )}
-                  </div>
-                ) : (
-                  <span>输入 YouTube 或哔哩哔哩链接后可登录。</span>
-                )}
-              </div>
-            </form>
-            {linkPreview && !linkProgress && (
-              <div className="link-preview">
-                <div>
-                  <strong>{linkPreview.title}</strong>
-                  <p>
-                    {linkPreview.source}
-                    {linkPreview.durationSeconds !== undefined
-                      ? ` · ${formatDuration(linkPreview.durationSeconds)}`
-                      : ''}
-                    {linkPreview.sizeBytes !== undefined
-                      ? ` · ${formatBytes(linkPreview.sizeBytes)}`
-                      : ''}
-                  </p>
-                </div>
-                <div className="link-preview-actions">
-                  <button
-                    type="button"
-                    className="primary-button compact-button"
-                    onClick={startLinkPlayback}
-                  >
-                    <PlayIcon size={18} weight="fill" aria-hidden="true" />
-                    在线播放
-                  </button>
-                  <button
-                    type="button"
-                    className="secondary-button compact-button"
-                    onClick={() => void startLinkImport()}
-                  >
-                    <DownloadSimpleIcon size={18} aria-hidden="true" />
-                    下载
-                  </button>
-                </div>
-              </div>
-            )}
-            {linkProgress && (
-              <div className="download-status" aria-live="polite">
-                <div className="download-copy">
-                  <span>
-                    {linkProgress.phase === 'starting'
-                      ? '正在准备下载…'
-                      : linkProgress.phase === 'processing'
-                        ? '正在整理视频…'
-                        : '正在下载视频…'}
-                  </span>
-                  {linkProgress.downloadedBytes !== undefined && (
-                    <span>
-                      {formatBytes(linkProgress.downloadedBytes)}
-                      {linkProgress.totalBytes !== undefined
-                        ? ` / ${formatBytes(linkProgress.totalBytes)}`
-                        : ''}
-                    </span>
-                  )}
-                </div>
-                <progress
-                  aria-label="视频下载进度"
-                  {...(linkProgress.totalBytes && linkProgress.downloadedBytes !== undefined
-                    ? { value: linkProgress.downloadedBytes, max: linkProgress.totalBytes }
-                    : {})}
-                />
-                <button
-                  type="button"
-                  className="text-button cancel-button"
-                  onClick={() => void cancelLinkImport()}
-                >
-                  <XIcon size={16} aria-hidden="true" />
-                  取消下载
-                </button>
-              </div>
-            )}
-            {error && (
-              <p className="inline-error" role="alert">
-                {error}
-              </p>
-            )}
-          </section>
+          <div className="welcome-scroll">{importContent}</div>
         )}
       </main>
+      <footer className="workspace-status">
+        <span>
+          {asset || onlinePlayback
+            ? `${onlinePlayback?.source ?? '本地视频'}${subtitleCues.length ? ` · ${subtitleCues.length} 条字幕` : ''}`
+            : '本地文件 · YouTube · 哔哩哔哩'}
+        </span>
+        {linkProgress ? (
+          <button className="text-button" type="button" onClick={() => setImportOpen(true)}>
+            下载进行中
+            {linkProgress.downloadedBytes !== undefined
+              ? ` · ${formatBytes(linkProgress.downloadedBytes)}`
+              : ''}
+          </button>
+        ) : (
+          <span>
+            {player.phase === 'playing'
+              ? '正在播放'
+              : asset || onlinePlayback
+                ? '就绪'
+                : '字幕工作台'}
+          </span>
+        )}
+      </footer>
+      {about && (
+        <WorkspaceDialog label="关于句织" onClose={goBack}>
+          <div className="about-page">{aboutContent}</div>
+        </WorkspaceDialog>
+      )}
+      {importOpen && (
+        <WorkspaceDialog label="打开视频" onClose={() => setImportOpen(false)}>
+          {importContent}
+        </WorkspaceDialog>
+      )}
       {dragging && (
         <div className="drop-overlay" aria-hidden="true">
           松开以打开视频

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-09-03T16:30:32.764Z",
+  "generatedAt": "2026-09-05T04:26:16.652Z",
   "title": "Design System: CueWeave Warm Paper",
   "extensions": {
     "colorMeta": {
@@ -511,6 +511,20 @@
       "player-secondary": {
         "role": "neutral",
         "displayName": "字幕次级墨色"
+      },
+      "desktop-video-canvas": {
+        "role": "neutral",
+        "displayName": "桌面视频画布",
+        "tonalRamp": [
+          "oklch(15% 0 0)",
+          "oklch(26.43% 0 0)",
+          "oklch(37.86% 0 0)",
+          "oklch(49.29% 0 0)",
+          "oklch(60.71% 0 0)",
+          "oklch(72.14% 0 0)",
+          "oklch(83.57% 0 0)",
+          "oklch(95% 0 0)"
+        ]
       }
     },
     "typographyMeta": {
@@ -553,6 +567,16 @@
         "name": "player-text-shadow-without-backing",
         "value": "0 1px 2px #000, 0 2px 4px #000",
         "purpose": "播放器关闭背板时的文字阴影；配合组件中的黑色描边。"
+      },
+      {
+        "name": "desktop-subtitle-text",
+        "value": "0 2px 5px #000, 0 0 2px #000",
+        "purpose": "仅桌面视频上的白色字幕，不用于面板。"
+      },
+      {
+        "name": "desktop-panel-overlay",
+        "value": "-12px 0 24px rgb(0 0 0 / 0.12)",
+        "purpose": "仅 900px 及以下覆盖视频的字幕侧栏；宽窗无投影。"
       }
     ],
     "motion": [
@@ -597,6 +621,14 @@
       {
         "name": "settings-navigation-row",
         "value": "760px"
+      },
+      {
+        "name": "desktop-panel-overlay",
+        "value": "900px"
+      },
+      {
+        "name": "desktop-compact",
+        "value": "680px"
       }
     ]
   },
@@ -684,6 +716,22 @@
       "description": "播放器组件的双语与操作样式；两种浏览器主题均保留中性深色。样例容器只提供组件展示空间。",
       "html": "<div class=\"ds-player\"><div class=\"ds-player-caption\" data-visible=\"true\" data-mode=\"bilingual\" data-order=\"translation-first\" data-translated=\"true\" data-backing=\"true\" data-action=\"true\"><div class=\"ds-player-translation\">完整的句子，让理解更自然。</div><div class=\"ds-player-source\">Complete sentences make understanding feel natural.</div><button type=\"button\" class=\"ds-player-translate-action\">重试翻译</button></div></div>",
       "css": ".ds-player { position: relative; min-height: 240px; width: 100%; container-type: inline-size; }\n.ds-player {\n      --cueweave-ink: #eeeeee;\n      --cueweave-secondary: #d5d5d5;\n      --cueweave-accent: #ff9859;\n      --cueweave-action-ink: #202020;\n      font-size: 16px;\n      color-scheme: dark;\n    }\n    .ds-player-caption {\n      position: absolute;\n      bottom: var(--cueweave-position, 9%);\n      left: 50%;\n      transform: translateX(-50%);\n      display: none;\n      box-sizing: border-box;\n      width: max-content;\n      max-width: 90%;\n      padding: 0.4em 0.7em 0.45em;\n      border: 0;\n      border-radius: 8px;\n      color: var(--cueweave-ink);\n      background: rgb(26 26 26 / var(--cueweave-caption-background-opacity, 0.8));\n      font-family: \"MiSans\", \"Mi Sans\", \"PingFang SC\", \"Microsoft YaHei\", system-ui, sans-serif;\n      font-size: calc(clamp(16px, 2.5cqi, 32px) * var(--cueweave-font-scale, 1) * var(--cueweave-fit-scale, 1));\n      font-weight: 600;\n      line-height: 1.42;\n      text-align: center;\n      text-wrap: balance;\n      overflow-wrap: anywhere;\n      text-shadow: 0 2px 3px rgb(0 0 0 / 80%);\n    }\n    .ds-player-caption[data-backing=\"false\"] {\n      -webkit-text-stroke: 1px rgb(0 0 0 / 85%);\n      paint-order: stroke fill;\n      text-shadow: 0 1px 2px #000, 0 2px 4px #000;\n    }\n    .ds-player.controls-visible .ds-player-caption {\n      bottom: max(var(--cueweave-position, 9%), 60px);\n    }\n    .ds-player-caption[data-visible=\"true\"] {\n      display: flex;\n      flex-direction: column;\n      align-items: stretch;\n      gap: 0.2em;\n    }\n    .ds-player-translation { display: none; }\n    .ds-player-caption[data-translated=\"true\"] .ds-player-translation { display: block; }\n    .ds-player-caption[data-translated=\"true\"] .ds-player-source {\n      color: var(--cueweave-secondary);\n      font-size: calc(1em * var(--cueweave-source-font-scale, 0.68));\n      font-weight: 400;\n      line-height: 1.4;\n    }\n    .ds-player-caption[data-mode=\"translation\"] .ds-player-source { display: none; }\n    .ds-player-caption[data-mode=\"source\"] .ds-player-translation { display: none; }\n    .ds-player-caption[data-mode=\"source\"] .ds-player-source {\n      color: inherit;\n      font-size: inherit;\n      font-weight: inherit;\n      line-height: inherit;\n    }\n    .ds-player-caption[data-mode=\"bilingual\"][data-order=\"source-first\"] .ds-player-source { order: -1; }\n    .ds-player-translate-action {\n      display: none;\n      align-items: center;\n      justify-content: center;\n      align-self: center;\n      box-sizing: border-box;\n      min-height: 32px;\n      max-width: 100%;\n      margin: 6px 0 0;\n      padding: 6px 12px;\n      border: 1px solid transparent;\n      border-radius: 8px;\n      background: var(--cueweave-accent);\n      color: var(--cueweave-action-ink);\n      font: 600 13px/1.4 \"MiSans\", \"Mi Sans\", \"PingFang SC\", \"Microsoft YaHei\", system-ui, sans-serif;\n      text-shadow: none;\n      -webkit-text-stroke: 0;\n      pointer-events: auto;\n      cursor: pointer;\n      transition: background-color 160ms ease-out;\n    }\n    .ds-player-caption[data-action=\"true\"] .ds-player-translate-action { display: inline-flex; }\n    .ds-player-translate-action:hover:not(:disabled) { background: #ffb184; }\n    .ds-player-translate-action:active:not(:disabled) { background: #ff9859; }\n    .ds-player-translate-action:focus-visible {\n      outline: 2px solid var(--cueweave-accent);\n      outline-offset: 3px;\n    }\n    .ds-player-translate-action:disabled {\n      color: var(--cueweave-secondary);\n      border-color: #898989;\n      background: #303030;\n      cursor: default;\n    }\n    @media (prefers-reduced-motion: reduce) {\n      .ds-player-translate-action { transition: none; }\n    }\n    @media (forced-colors: active) {\n      .ds-player-caption { background: Canvas; color: CanvasText; text-shadow: none; }\n      .ds-player-caption .ds-player-source { color: CanvasText; }\n      .ds-player-translate-action { border-color: ButtonText; }\n    }"
+    },
+    {
+      "name": "桌面导入主按钮",
+      "kind": "button",
+      "refersTo": "desktop-button-primary",
+      "description": "桌面最小高度 42px 的导入操作；白字保留于两种主题，禁用时不透明度 0.6。无单独主按钮悬停或按下颜色覆盖。",
+      "html": "<button class=\"ds-desktop-primary\" type=\"button\">打开视频</button>",
+      "css": ".ds-desktop-primary { font-family: 'MiSans', 'Mi Sans', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif; font-synthesis: none; display: inline-flex; align-items: center; gap: 8px; min-height: 42px; padding: 9px 16px; border: 1px solid var(--accent, #b6450f); border-radius: 8px; background: var(--accent, #b6450f); color: #fff; font-size: 0.875rem; font-weight: 600; line-height: 1.6; cursor: pointer; } .ds-desktop-primary:focus-visible { outline: 2px solid var(--accent, #b6450f); outline-offset: 4px; } .ds-desktop-primary:disabled { opacity: 0.6; cursor: not-allowed; }"
+    },
+    {
+      "name": "桌面当前字幕行",
+      "kind": "custom",
+      "refersTo": "desktop-subtitle-current",
+      "description": "当前句的文字、时间、背景与 aria-current 同时表达状态。行高随内容变化，点击由播放器定位逻辑处理。",
+      "html": "<button class=\"ds-desktop-cue\" type=\"button\" aria-current=\"true\"><span class=\"ds-desktop-time\">00:12 <span>当前</span></span><span class=\"ds-desktop-cue-text\">字幕内容</span></button>",
+      "css": ".ds-desktop-cue { font-family: 'MiSans', 'Mi Sans', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif; font-synthesis: none; display: block; width: 100%; border: 0; border-bottom: 1px solid var(--line, #dedbd5); background: transparent; color: var(--ink, #383838); text-align: left; padding: 14px 16px; cursor: pointer; } .ds-desktop-cue:hover, .ds-desktop-cue[aria-current] { background: var(--surface-muted, #eeeae4); } .ds-desktop-cue:focus-visible { outline: 2px solid var(--accent, #b6450f); outline-offset: -3px; } .ds-desktop-time { display: flex; justify-content: space-between; color: var(--ink-secondary, #69645e); font-size: 0.6875rem; font-variant-numeric: tabular-nums; margin-bottom: 6px; } .ds-desktop-cue[aria-current] .ds-desktop-time { color: var(--accent, #b6450f); } .ds-desktop-cue-text { font-size: 0.8125rem; line-height: 1.75; white-space: pre-line; overflow-wrap: anywhere; } .ds-desktop-cue[aria-current] .ds-desktop-cue-text { font-weight: 600; }"
     }
   ],
   "narrative": {

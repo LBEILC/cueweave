@@ -142,6 +142,7 @@ const child = spawn(
   [
     ...Object.values(fixtures).map((fixture) => `--d0-check-input=${fixture}`),
     '--d0-check',
+    '--mute-audio',
     '--disable-gpu-sandbox',
   ],
   { cwd: isolated, env, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] },

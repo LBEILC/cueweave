@@ -21,7 +21,12 @@ let service: DesktopServiceHost | null = null;
 let shuttingDown = false;
 
 app.setName('CueWeave');
-if (hidden || d0Check || linkCheck) app.disableHardwareAcceleration();
+if (hidden || d0Check || linkCheck) {
+  app.disableHardwareAcceleration();
+  // Automated media checks still decode audio, but must never use the user's speakers.
+  app.commandLine.appendSwitch('mute-audio');
+  app.on('web-contents-created', (_event, contents) => contents.setAudioMuted(true));
+}
 if (process.env.CUEWEAVE_TEST_USER_DATA && (!app.isPackaged || d0Check || linkCheck)) {
   app.setPath('userData', process.env.CUEWEAVE_TEST_USER_DATA);
 }

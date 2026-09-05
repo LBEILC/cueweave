@@ -98,8 +98,8 @@ async function check(name, url, expectedTitle) {
   const application = await electron.launch({
     ...(executable ? { executablePath: executable } : {}),
     args: executable
-      ? ['--hidden', '--link-check']
-      : [desktopDirectory, '--hidden', '--link-check'],
+      ? ['--hidden', '--link-check', '--mute-audio']
+      : [desktopDirectory, '--hidden', '--link-check', '--mute-audio'],
     env,
     timeout: 30_000,
   });
@@ -140,8 +140,8 @@ async function checkCancelAndResume() {
   const application = await electron.launch({
     ...(executable ? { executablePath: executable } : {}),
     args: executable
-      ? ['--hidden', '--link-check']
-      : [desktopDirectory, '--hidden', '--link-check'],
+      ? ['--hidden', '--link-check', '--mute-audio']
+      : [desktopDirectory, '--hidden', '--link-check', '--mute-audio'],
     env,
     timeout: 30_000,
   });
@@ -182,8 +182,8 @@ async function checkYoutubeStreaming() {
   const application = await electron.launch({
     ...(executable ? { executablePath: executable } : {}),
     args: executable
-      ? ['--hidden', '--link-check']
-      : [desktopDirectory, '--hidden', '--link-check'],
+      ? ['--hidden', '--link-check', '--mute-audio']
+      : [desktopDirectory, '--hidden', '--link-check', '--mute-audio'],
     env,
     timeout: 30_000,
   });
@@ -200,11 +200,13 @@ async function checkYoutubeStreaming() {
     const qualityOptions = await page.getByLabel('清晰度').locator('option').allTextContents();
     assert.ok(qualityOptions.some((label) => label.includes('240p')));
     assert.ok(qualityOptions.some((label) => label.includes('144p')));
+    await page.getByRole('button', { name: '字幕', exact: true }).click();
     const subtitleOptions = await page.getByLabel('在线字幕').locator('option').allTextContents();
     assert.ok(subtitleOptions.includes('English（人工）'));
     assert.ok(subtitleOptions.includes('en（自动）'));
     await page.getByLabel('在线字幕').selectOption({ label: 'English（人工）' });
     await page.locator('.subtitle-overlay').waitFor();
+    await page.locator('.subtitle-source-options > summary').click();
     await page.getByLabel('在线字幕').selectOption({ label: 'en（自动）' });
     await page.locator('.subtitle-overlay').waitFor({ state: 'hidden' });
     await page.locator('.subtitle-overlay').waitFor();
@@ -266,8 +268,8 @@ async function checkYoutubeHighResolution() {
   const application = await electron.launch({
     ...(executable ? { executablePath: executable } : {}),
     args: executable
-      ? ['--hidden', '--link-check']
-      : [desktopDirectory, '--hidden', '--link-check'],
+      ? ['--hidden', '--link-check', '--mute-audio']
+      : [desktopDirectory, '--hidden', '--link-check', '--mute-audio'],
     env,
     timeout: 30_000,
   });
@@ -317,8 +319,8 @@ async function checkBilibiliStreaming() {
   const application = await electron.launch({
     ...(executable ? { executablePath: executable } : {}),
     args: executable
-      ? ['--hidden', '--link-check']
-      : [desktopDirectory, '--hidden', '--link-check'],
+      ? ['--hidden', '--link-check', '--mute-audio']
+      : [desktopDirectory, '--hidden', '--link-check', '--mute-audio'],
     env,
     timeout: 30_000,
   });
@@ -424,7 +426,12 @@ try {
     results.push(result);
     process.stdout.write(`Passed ${label}.\n`);
   };
-  if (process.env.CUEWEAVE_LINK_ONLY === 'bilibili') {
+  if (process.env.CUEWEAVE_LINK_ONLY === 'local') {
+    await record('direct URL playback and download', () =>
+      check('direct', directUrl, 'no-head.mp4'),
+    );
+    await record('download cancellation and resume', checkCancelAndResume);
+  } else if (process.env.CUEWEAVE_LINK_ONLY === 'bilibili') {
     await record('Bilibili streaming', checkBilibiliStreaming);
   } else if (process.env.CUEWEAVE_LINK_ONLY === 'youtube') {
     await record('YouTube streaming', checkYoutubeStreaming);

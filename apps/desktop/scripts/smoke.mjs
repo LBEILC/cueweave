@@ -99,7 +99,12 @@ async function check(mode, rendererUrl) {
   env.CUEWEAVE_TEST_USER_DATA = await mkdtemp(join(tmpdir(), `cueweave-smoke-${mode}-`));
   const application = await electron.launch({
     ...(mode === 'packaged' && packagedExecutable ? { executablePath: packagedExecutable } : {}),
-    args: mode === 'packaged' && packagedExecutable ? ['--hidden'] : [desktopDirectory, '--hidden'],
+    args: [
+      ...(mode === 'packaged' && packagedExecutable ? [] : [desktopDirectory]),
+      '--hidden',
+      '--mute-audio',
+      ...(process.env.CUEWEAVE_TEST_DISABLE_GPU_SANDBOX === '1' ? ['--disable-gpu-sandbox'] : []),
+    ],
     env,
     timeout: 30000,
   });
@@ -109,6 +114,22 @@ async function check(mode, rendererUrl) {
     page.setDefaultTimeout(15000);
     page.on('pageerror', (error) => errors.push(error.message));
     await page.getByRole('heading', { name: '打开一个视频开始工作' }).waitFor();
+    assert.equal(
+      await application.evaluate(
+        ({ app, BrowserWindow }) =>
+          app.commandLine.hasSwitch('mute-audio') &&
+          BrowserWindow.getAllWindows()[0].webContents.isAudioMuted(),
+      ),
+      true,
+    );
+    if (mode !== 'packaged') {
+      await page.emulateMedia({ colorScheme: 'light', reducedMotion: 'reduce' });
+      await page.evaluate(() => document.fonts.ready);
+      await page.screenshot({ path: join(outputDirectory, `${mode}-empty.png`) });
+      await page.getByRole('button', { name: '读取链接', exact: true }).click();
+      await page.getByText('请输入视频链接。', { exact: true }).waitFor();
+      await page.screenshot({ path: join(outputDirectory, `${mode}-import-error.png`) });
+    }
     const exposed = await page.evaluate(() => ({
       methods: Object.keys(window.cueweave).sort(),
       require: typeof window.require,
@@ -198,6 +219,114 @@ async function check(mode, rendererUrl) {
     }
     await page.emulateMedia({ colorScheme: 'light', reducedMotion: 'reduce' });
     await page.evaluate(() => document.fonts.ready);
+    // The desktop workspace must fit the window, including controls, at every supported size.
+    for (const [width, height] of [
+      [1120, 720],
+      [960, 640],
+      [640, 480],
+    ]) {
+      await application.evaluate(
+        ({ BrowserWindow }, size) => BrowserWindow.getAllWindows()[0].setContentSize(...size),
+        [width, height],
+      );
+      await page.waitForFunction(() => {
+        const rect = document.querySelector('.player-controls').getBoundingClientRect();
+        return rect.height > 0 && rect.bottom <= window.innerHeight;
+      });
+      assert.deepEqual(
+        await page.evaluate(() => ({
+          horizontal: document.documentElement.scrollWidth > window.innerWidth,
+          vertical: document.documentElement.scrollHeight > window.innerHeight,
+          controlsVisible: [
+            ...document.querySelectorAll(
+              '.player-controls button, .player-controls input, .player-controls select',
+            ),
+          ].every((element) => {
+            const rect = element.getBoundingClientRect();
+            return (
+              rect.left >= 0 &&
+              rect.right <= window.innerWidth &&
+              rect.top >= 0 &&
+              rect.bottom <= window.innerHeight
+            );
+          }),
+        })),
+        { horizontal: false, vertical: false, controlsVisible: true },
+      );
+    }
+    await application.evaluate(({ BrowserWindow }) =>
+      BrowserWindow.getAllWindows()[0].setContentSize(1120, 720),
+    );
+    await page.locator('video').evaluate((video) => {
+      video.pause();
+      video.currentTime = 1;
+      video.dataset.continuity = 'same-element';
+    });
+    const subtitlePath = join(fixtureDirectory, 'D1 layout subtitles.vtt');
+    await writeFile(
+      subtitlePath,
+      'WEBVTT\n\n00:00.000 --> 00:00.800\nFirst subtitle.\n\n00:00.800 --> 00:01.800\nA longer subtitle with enough text to verify wrapping inside the panel.\n\n00:01.800 --> 00:03.000\n最后一句字幕，用于检查中文显示和点击定位。\n' +
+        Array.from(
+          { length: 500 },
+          (_, index) =>
+            `\n00:${String(Math.floor((index + 4) / 60)).padStart(2, '0')}:${String((index + 4) % 60).padStart(2, '0')}.000 --> 00:${String(Math.floor((index + 5) / 60)).padStart(2, '0')}:${String((index + 5) % 60).padStart(2, '0')}.000\nLayout fixture ${index + 4}: this is a deliberately long subtitle to exercise independent scrolling.\n`,
+        ).join(''),
+    );
+    await application.evaluate(({ dialog }, path) => {
+      const original = dialog.showOpenDialog;
+      dialog.showOpenDialog = async () => {
+        dialog.showOpenDialog = original;
+        return { canceled: false, filePaths: [path] };
+      };
+    }, subtitlePath);
+    await page.getByRole('button', { name: '字幕', exact: true }).click();
+    await page.getByRole('button', { name: '加载字幕', exact: true }).click();
+    await page.getByLabel('搜索字幕').fill('最后一句');
+    await page.locator('.subtitle-row').click();
+    assert.ok(
+      await page
+        .locator('video')
+        .evaluate((video) => video.currentTime >= 1.8 && video.currentTime < 2),
+    );
+    await page.getByLabel('搜索字幕').fill('');
+    await page.getByRole('button', { name: '定位当前句', exact: true }).click();
+    assert.equal(await page.locator('.subtitle-row[aria-current="true"]').count(), 1);
+    await page.locator('.subtitle-list').evaluate((element) => {
+      element.scrollTop = element.scrollHeight;
+    });
+    assert.equal(await page.evaluate(() => document.documentElement.scrollTop), 0);
+    await page.getByRole('button', { name: '定位当前句', exact: true }).click();
+    await page.getByRole('button', { name: '打开其他视频', exact: true }).click();
+    await page.getByRole('dialog', { name: '打开视频', exact: true }).waitFor();
+    await page.keyboard.press('Escape');
+    assert.equal(
+      await page.locator('video').evaluate((video) => video.dataset.continuity),
+      'same-element',
+    );
+    assert.ok(
+      await page.locator('video').evaluate((video) => video.paused && video.currentTime >= 1.8),
+    );
+    if (mode !== 'packaged') {
+      for (const theme of ['light', 'dark']) {
+        await page.emulateMedia({ colorScheme: theme });
+        await page.screenshot({ path: join(outputDirectory, `${mode}-subtitles-${theme}.png`) });
+      }
+      await application.evaluate(({ BrowserWindow }) =>
+        BrowserWindow.getAllWindows()[0].setContentSize(640, 480),
+      );
+      await page.screenshot({ path: join(outputDirectory, `${mode}-subtitles-narrow.png`) });
+      assert.equal(
+        await page.evaluate(
+          () =>
+            document.querySelector('.player-controls').getBoundingClientRect().bottom <=
+            window.innerHeight,
+        ),
+        true,
+      );
+      await application.evaluate(({ BrowserWindow }) =>
+        BrowserWindow.getAllWindows()[0].setContentSize(1120, 720),
+      );
+    }
     if (mode !== 'packaged')
       await page.screenshot({
         path: join(outputDirectory, `${mode}-workspace.png`),
@@ -205,8 +334,14 @@ async function check(mode, rendererUrl) {
       });
     await page.getByRole('button', { name: '关于', exact: true }).click();
     await page.getByText(manifest.version, { exact: true }).waitFor();
+    await page.waitForFunction(
+      () => document.activeElement === document.querySelector('dialog h1'),
+    );
     assert.equal(
-      await page.locator('h1').evaluate((element) => element === document.activeElement),
+      await page
+        .getByRole('dialog')
+        .locator('h1')
+        .evaluate((element) => element === document.activeElement),
       true,
     );
     for (const theme of ['light', 'dark']) {
@@ -230,6 +365,13 @@ async function check(mode, rendererUrl) {
       true,
     );
     await page.getByRole('button', { name: '返回工作台' }).click();
+    assert.equal(
+      await page.locator('video').evaluate((video) => video.dataset.continuity),
+      'same-element',
+    );
+    assert.ok(
+      await page.locator('video').evaluate((video) => video.paused && video.currentTime >= 1.8),
+    );
     assert.equal(
       await page
         .getByRole('button', { name: '关于', exact: true })
