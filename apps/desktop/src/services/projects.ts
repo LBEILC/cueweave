@@ -7,8 +7,15 @@ import { serializeSubtitles } from '@cueweave/core';
 import type { MediaProbe } from '../shared/bridge';
 import type { ProjectCommand, ProjectCue, ProjectSnapshot } from '../shared/project';
 import { parseImportedSubtitles } from './subtitle-import';
+import type { ProviderSettings } from '@cueweave/core/provider/types';
+import {
+  TRANSLATION_SCHEMA,
+  TranslationStore,
+  type TranslationStoreCommand,
+} from './translation-store';
 
 interface StoredProject {
+  translationId?: string;
   id: string;
   name: string;
   revision: number;
@@ -26,7 +33,8 @@ interface StoredProject {
 }
 export interface ProjectServiceRequest {
   directory: string;
-  command: ProjectCommand;
+  command: ProjectCommand | TranslationStoreCommand;
+  provider?: ProviderSettings;
   mediaPath?: string;
   subtitlePath?: string;
   outputPath?: string;
@@ -65,6 +73,7 @@ async function fingerprint(path: string) {
 }
 
 export class ProjectStore {
+  private readonly recoveredDirectories = new Set<string>();
   private readonly verifiedMedia = new Map<
     string,
     { path: string; size: number; mtimeMs: number } | null
@@ -90,10 +99,17 @@ export class ProjectStore {
     try {
       db = new Database(dbPath, { fileMustExist: !creating });
       const version = Number(db.pragma('user_version', { simple: true }));
-      if (!creating && version !== 1)
+      if (!creating && version !== 1 && version !== 2)
         throw new Error(
-          version > 1 ? '项目来自更新版本，请升级句织后打开。' : '项目版本不受支持。',
+          version > 2 ? '项目来自更新版本，请升级句织后打开。' : '项目版本不受支持。',
         );
+      if (!creating && version === 1) {
+        await db.backup(join(directory, `project-schema-1-${randomUUID()}.sqlite`));
+        db.transaction(() => {
+          db!.exec(TRANSLATION_SCHEMA);
+          db!.pragma('user_version = 2');
+        })();
+      }
       db.pragma('journal_mode = WAL');
       db.pragma('synchronous = FULL');
       db.pragma('busy_timeout = 5000');
@@ -124,7 +140,15 @@ export class ProjectStore {
           db!.exec(
             "CREATE TABLE track_state (id TEXT PRIMARY KEY, cues TEXT NOT NULL, edits TEXT NOT NULL, cursor INTEGER NOT NULL, warnings TEXT NOT NULL, language TEXT NOT NULL DEFAULT 'und', precision TEXT NOT NULL DEFAULT 'cue')",
           );
+          db!.exec(TRANSLATION_SCHEMA);
+          db!.pragma('user_version = 2');
         })();
+      }
+      if (!this.recoveredDirectories.has(directory)) {
+        db.prepare(
+          "UPDATE translation_runs SET state='interrupted', error='翻译因应用或后台服务退出而中断，已保存部分可继续。' WHERE state='running'",
+        ).run();
+        this.recoveredDirectories.add(directory);
       }
       const read = () =>
         JSON.parse(
@@ -142,13 +166,15 @@ export class ProjectStore {
         if ('baseRevision' in command && p.revision !== command.baseRevision)
           throw new Error('项目已有更新，当前修改未写入。请重新打开项目后重试。');
       };
-      if ('baseRevision' in command) verifyRevision();
+      if ('baseRevision' in command && !['refresh', 'cancel-translation'].includes(command.action))
+        verifyRevision();
       const cues = () =>
         db!
           .prepare('SELECT id, startMs, endMs, text FROM cues ORDER BY startMs, endMs, id')
           .all() as ProjectCue[];
       const writeCue = (cue: ProjectCue) =>
         db!.prepare('INSERT OR REPLACE INTO cues VALUES (@id, @startMs, @endMs, @text)').run(cue);
+      const translations = () => new TranslationStore(db!, p.activeTrack, cues());
       const archiveActive = () => {
         if (p.activeTrack)
           db!
@@ -163,7 +189,34 @@ export class ProjectStore {
               JSON.stringify(p.warnings),
             );
       };
-      if (command.action === 'import') {
+      if (command.action === 'translation-begin') {
+        db.transaction(() => {
+          verifyRevision();
+          p.translationId = translations().begin(command);
+          p.revision++;
+          save(p);
+        })();
+      } else if (command.action === 'translation-commit') {
+        db.transaction(() => {
+          translations().commit(command);
+          save(p);
+        })();
+      } else if (command.action === 'translation-finish') {
+        db.transaction(() => translations().finish(command))();
+      } else if (
+        command.action === 'edit-translation' ||
+        command.action === 'undo-translation' ||
+        command.action === 'redo-translation'
+      ) {
+        db.transaction(() => {
+          verifyRevision();
+          if (command.action === 'edit-translation')
+            translations().edit(command.translationId, command.cueId, command.text);
+          else translations().history(command.translationId, command.action === 'redo-translation');
+          p.revision++;
+          save(p);
+        })();
+      } else if (command.action === 'import') {
         if (!request.subtitlePath) throw new Error('请选择字幕文件。');
         if ((await stat(request.subtitlePath)).size > 10_000_000)
           throw new Error('字幕文件超过 10 MB。');
@@ -288,7 +341,7 @@ export class ProjectStore {
           targetParent.startsWith(directory + '/')
         )
           throw new Error('请将导出字幕保存到项目目录以外。');
-        const snapshot = command.original
+        let snapshot = command.original
           ? (JSON.parse(
               (
                 db.prepare('SELECT cues FROM tracks WHERE id=?').get(p.activeTrack) as
@@ -296,6 +349,22 @@ export class ProjectStore {
               )?.cues ?? '[]',
             ) as ProjectCue[])
           : cues();
+        if (command.mode) {
+          const translation = translations().snapshot(p.translationId);
+          if (!translation) throw new Error('字幕尚未翻译。');
+          if (translation.completed !== translation.total && !command.partial)
+            throw new Error('字幕翻译尚未完成，请先补齐缺失内容，或明确选择部分导出。');
+          snapshot = snapshot
+            .filter((cue) => Boolean(translation.cues[cue.id]))
+            .map((cue) => ({
+              ...cue,
+              text:
+                command.mode === 'bilingual'
+                  ? `${cue.text}\n${translation.cues[cue.id]}`
+                  : translation.cues[cue.id]!,
+            }));
+          if (!snapshot.length) throw new Error('没有可导出的译文。');
+        }
         snapshot.sort((a, b) => a.startMs - b.startMs);
         const content = serializeSubtitles(
           snapshot.map((c) => ({
@@ -384,6 +453,7 @@ export class ProjectStore {
         }
       if (!mediaPath) this.verifiedMedia.set(p.id, null);
       const project: ProjectSnapshot = {
+        translation: translations().snapshot(p.translationId),
         id: p.id,
         name: p.name,
         revision: p.revision,

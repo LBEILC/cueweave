@@ -251,7 +251,13 @@ app
       store: settingsStore,
       loadError: settingsLoadError,
     });
-    const disposeProjectIpc = registerProjectIpc({ window, rendererUrl, media, service });
+    const disposeProjectIpc = registerProjectIpc({
+      window,
+      rendererUrl,
+      media,
+      service,
+      settings: settingsStore,
+    });
     const disposeIpc = registerAppIpc({
       window,
       rendererUrl,

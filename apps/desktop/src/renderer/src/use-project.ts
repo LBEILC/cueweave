@@ -8,6 +8,7 @@ export function useProject(onOpened: (opened: ProjectOpened) => void) {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const active = useRef(false);
+  const refreshing = useRef(false);
   const openedRef = useRef(onOpened);
   openedRef.current = onOpened;
   const current = useRef(project);
@@ -48,6 +49,37 @@ export function useProject(onOpened: (opened: ProjectOpened) => void) {
   useEffect(() => {
     void run({ action: 'recent' });
   }, []);
+  useEffect(() => {
+    if (project?.translation?.state !== 'running') return;
+    const timer = setInterval(() => {
+      const p = current.current;
+      if (!p || active.current || refreshing.current) return;
+      refreshing.current = true;
+      void window.cueweave
+        .projectCommand({ action: 'refresh', projectId: p.id, baseRevision: p.revision })
+        .then((result) => {
+          if (
+            active.current ||
+            current.current?.id !== p.id ||
+            current.current.revision !== p.revision
+          )
+            return;
+          if (!result.ok) {
+            setError(result.error.message);
+            return;
+          }
+          const next = result.value?.project;
+          if (next) {
+            setProject(next);
+            current.current = next;
+          }
+        })
+        .finally(() => {
+          refreshing.current = false;
+        });
+    }, 800);
+    return () => clearInterval(timer);
+  }, [project?.id, project?.translation?.state]);
   const checkpoint = async (positionSeconds: number) => {
     const p = current.current;
     if (!p || active.current || !Number.isFinite(positionSeconds)) return;

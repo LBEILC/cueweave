@@ -1,6 +1,6 @@
 # CueWeave Desktop
 
-Electron 桌面应用工作区。当前提供安全宿主、统一的 DOM 播放器、视频链接播放、后台媒体探测、字幕项目编辑与持久化，以及 Windows x64 安装包。链接入口支持 HTTP(S) 媒体直链，以及公开的 YouTube 和哔哩哔哩单视频；翻译按 D2 接入，ASR 路线确定前不下载模型或调用识别服务。
+Electron 桌面应用工作区。当前提供安全宿主、统一的 DOM 播放器、视频链接播放、后台媒体探测、字幕项目编辑与持久化、AI 字幕翻译和双语导出。链接入口支持 HTTP(S) 媒体直链，以及公开的 YouTube 和哔哩哔哩单视频；ASR 路线确定前不下载模型或调用识别服务。
 
 产品边界、进程架构、媒体与 ASR 接入、项目持久化及验收要求见[桌面端开发规格](../../docs/DESKTOP.md)。实现顺序与阶段完成条件由[开发路线图](../../docs/ROADMAP.md#桌面应用)维护。
 
@@ -8,7 +8,9 @@ Electron 桌面应用工作区。当前提供安全宿主、统一的 DOM 播放
 
 项目创建、字幕导入、编辑、撤销重做、关闭恢复和原文导出的范围见 [D1 实施与验收](../../docs/DESKTOP_D1.md)。
 
-顶栏设置提供浅色、深色、跟随系统，以及 AI 服务地址、模型、协议、加密密钥保存和连接测试。进入设置暂停播放，返回保留位置；设置独立于字幕项目。使用说明与安全边界见[桌面设置](../../docs/DESKTOP_SETTINGS.md)。翻译任务尚未接入。
+顶栏设置提供浅色、深色、跟随系统、字幕显示与实时预览，以及 AI 服务地址、模型、协议、加密密钥保存和连接测试。进入设置暂停播放，返回保留位置；设置独立于字幕项目。使用说明与安全边界见[桌面设置](../../docs/DESKTOP_SETTINGS.md)。
+
+项目字幕侧栏可翻译整片已有字幕，显示进度、取消并继续剩余范围、校对译文，以及导出译文或双语。时间轴保持不变，人工修改受保护；已提交结果随项目保存，重启后由用户主动继续模型调用。范围、数据库升级与验收见 [D2 实施与验收](../../docs/DESKTOP_D2.md)。
 
 模块依赖规则见[仓库结构与依赖边界](../../docs/WORKSPACE.md)。依赖统一在仓库根目录安装，可用命令以本目录的 [package.json](package.json) 为准。
 
@@ -53,6 +55,7 @@ npm run test:desktop:smoke
 node apps/desktop/scripts/controls-acceptance.mjs
 npm run test:desktop:project
 npm run test:desktop:settings
+npm run test:desktop:translation
 npm run pack:desktop
 npm run test:desktop:d0
 npm run test:desktop:links

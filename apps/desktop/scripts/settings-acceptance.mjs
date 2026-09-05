@@ -187,7 +187,7 @@ try {
   );
   await page.locator('.settings-scroll').evaluate((el) => (el.scrollTop = el.scrollHeight));
   await page.getByRole('button', { name: '返回工作台', exact: true }).click();
-  await page.getByText('AI 配置尚未保存，要放弃这次修改吗？', { exact: true }).waitFor();
+  await page.getByText('设置尚未保存，要放弃这次修改吗？', { exact: true }).waitFor();
   await page.waitForFunction(() => document.activeElement?.textContent?.includes('继续编辑'));
   assert.ok(
     await page.getByRole('button', { name: '继续编辑', exact: true }).evaluate((el) => {

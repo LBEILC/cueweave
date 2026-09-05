@@ -9,6 +9,8 @@ import type { SubtitleRequest } from '../shared/service';
 import { downloadLink, fetchWebsiteSubtitle, inspectLink, LinkError } from './link';
 import { ProjectStore, projectErrorMessage, type ProjectServiceRequest } from './projects';
 const projects = new ProjectStore();
+import { TranslationJobs } from './translation-jobs';
+const translations = new TranslationJobs(projects);
 
 const parentPort = process.parentPort;
 if (!parentPort) throw new Error('CueWeave service requires an Electron parent port');
@@ -201,7 +203,7 @@ async function storageCheck(): Promise<{ token: string; reopened: boolean }> {
 async function handle(request: ServiceRequest): Promise<unknown> {
   switch (request.method) {
     case 'project':
-      return projects.run(request.payload as ProjectServiceRequest);
+      return translations.run(request.payload as ProjectServiceRequest);
     case 'health':
       return { generation, pid: process.pid };
     case 'storageCheck':
@@ -359,6 +361,7 @@ async function handle(request: ServiceRequest): Promise<unknown> {
       return { cancelled: Boolean(controller) || killed };
     }
     case 'shutdown':
+      await translations.shutdown();
       for (const controller of controllers.values()) controller.abort();
       await Promise.all([...running.values()].map((child) => killTree(child)));
       return null;

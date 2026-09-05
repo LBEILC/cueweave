@@ -7,12 +7,14 @@ import type { ProjectServiceReply, ProjectServiceRequest } from '../services/pro
 import type { MediaRegistry } from './media';
 import { type DesktopServiceHost, ServiceHostError } from './service-host';
 import { isTrustedSender } from './security';
+import type { SettingsStore } from './settings-store';
 
 export function registerProjectIpc(options: {
   window: BrowserWindow;
   rendererUrl: string;
   media: MediaRegistry;
   service: DesktopServiceHost;
+  settings?: SettingsStore;
 }) {
   const { window, service, media } = options;
   const authorized = new Map<string, string>();
@@ -48,6 +50,18 @@ export function registerProjectIpc(options: {
     )
       return desktopError('FORBIDDEN');
     if (!isProjectCommand(command)) return desktopError('INVALID_REQUEST');
+    if (command.action === 'refresh') {
+      const directory = authorized.get(command.projectId);
+      if (!directory) return desktopError('FORBIDDEN');
+      try {
+        return { ok: true, value: { project: (await perform({ directory, command })).project } };
+      } catch {
+        return {
+          ok: false,
+          error: { code: 'PROJECT_ERROR', message: '无法读取项目进度，请稍后重试。' },
+        };
+      }
+    }
     if (busy)
       return {
         ok: false,
@@ -95,6 +109,24 @@ export function registerProjectIpc(options: {
       if (!('projectId' in command)) return desktopError('INVALID_REQUEST');
       const directory = authorized.get(command.projectId);
       if (!directory) return desktopError('FORBIDDEN');
+      if (command.action === 'translate' || command.action === 'resume-translation') {
+        const saved = options.settings?.snapshot();
+        const apiKey = options.settings?.key();
+        if (!saved?.provider.baseUrl || !saved.provider.model || !apiKey)
+          return {
+            ok: false,
+            error: {
+              code: 'PROJECT_ERROR',
+              message: '请先在设置中填写并保存 AI 服务、模型和 API Key。',
+            },
+          };
+        const reply = await perform({
+          directory,
+          command,
+          provider: { ...saved.provider, apiKey },
+        });
+        return { ok: true, value: { project: reply.project } };
+      }
       if (command.action === 'import') {
         const chosen = await dialog.showOpenDialog(window, {
           title: '导入字幕',
@@ -123,8 +155,12 @@ export function registerProjectIpc(options: {
       }
       if (command.action === 'export') {
         const chosen = await dialog.showSaveDialog(window, {
-          title: command.original ? '导出原始字幕' : '导出编辑后字幕',
-          defaultPath: `${basename(directory, '.cueweave')}${command.original ? '-原始' : ''}.${command.format}`,
+          title: command.mode
+            ? `导出${command.partial ? '部分' : ''}${command.mode === 'bilingual' ? '双语字幕' : '译文'}`
+            : command.original
+              ? '导出原始字幕'
+              : '导出编辑后字幕',
+          defaultPath: `${basename(directory, '.cueweave')}${command.original ? '-原始' : command.mode === 'bilingual' ? '-双语' : command.mode ? '-译文' : ''}${command.partial ? '-部分' : ''}.${command.format}`,
           filters: [{ name: '字幕', extensions: [command.format] }],
         });
         if (chosen.canceled || !chosen.filePath) return { ok: true, value: null };

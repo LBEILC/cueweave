@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-09-05T05:24:48.097Z",
+  "generatedAt": "2026-09-05T07:23:56.275Z",
   "title": "Design System: CueWeave Warm Paper",
   "extensions": {
     "colorMeta": {
@@ -763,7 +763,7 @@
       "name": "桌面字幕编辑字段",
       "kind": "input",
       "refersTo": "desktop-editor-input",
-      "description": "字幕编辑表单的秒数与文本字段；毫秒步长、可见标签、并排时间字段和独立滚动。样例只展示字段，不执行保存。",
+      "description": "字幕编辑字段保留毫秒步长与并排时间；实际编辑器仅字段正文滚动，标题、模式与保存固定。有译文时可切换原文／译文，草稿未保存时禁用切换；低高度编辑接管侧栏。此样例仅展示字段。",
       "html": "<div class=\"ds-desktop-editor\"><div class=\"ds-desktop-times\"><label>开始（秒）<input type=\"number\" min=\"0\" step=\"0.001\" value=\"12\"></label><label>结束（秒）<input type=\"number\" min=\"0\" step=\"0.001\" value=\"15\"></label></div><label>字幕文本<textarea rows=\"3\">字幕内容</textarea></label></div>",
       "css": ".ds-desktop-editor { font-family: 'MiSans', 'Mi Sans', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif; font-synthesis: none; padding: 12px 16px; border-top: 1px solid var(--line, #dedbd5); background: var(--paper, #f8f4ed); font-size: 0.75rem; line-height: 1.6; overflow: auto; } .ds-desktop-times { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; margin-bottom: 8px; } .ds-desktop-editor label { display: grid; gap: 4px; color: var(--ink-secondary, #69645e); } .ds-desktop-editor input, .ds-desktop-editor textarea { width: 100%; min-width: 0; border: 1px solid var(--line, #dedbd5); border-radius: 8px; padding: 7px 8px; color: var(--ink, #383838); background: var(--surface, #fffdf9); font: inherit; caret-color: var(--accent, #b6450f); } .ds-desktop-editor textarea { resize: vertical; min-height: 64px; } .ds-desktop-editor input:focus-visible { outline: 2px solid var(--accent, #b6450f); outline-offset: 2px; }"
     },
@@ -771,7 +771,7 @@
       "name": "桌面保存修改",
       "kind": "button",
       "refersTo": "desktop-editor-save",
-      "description": "编辑表单中的紧凑保存按钮；无修改、内容无效或保存中禁用。沿用独立白字按钮实底。",
+      "description": "编辑器固定在字段滚动区之外的保存按钮；无修改、内容无效或保存中禁用。沿用独立白字按钮实底。",
       "html": "<button type=\"button\" class=\"ds-desktop-save\">保存修改</button>",
       "css": ".ds-desktop-save { font-family: 'MiSans', 'Mi Sans', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif; font-synthesis: none; display: inline-flex; align-items: center; gap: 8px; min-height: 32px; padding: 6px 12px; border: 1px solid var(--primary-fill, #b6450f); border-radius: 8px; background: var(--primary-fill, #b6450f); color: #fff; font-size: 0.75rem; font-weight: 600; line-height: 1.6; cursor: pointer; } .ds-desktop-save:focus-visible { outline: 2px solid var(--accent, #b6450f); outline-offset: 4px; } .ds-desktop-save:disabled { opacity: 0.6; cursor: not-allowed; }"
     },
@@ -781,6 +781,13 @@
       "description": "保留原生 select 键盘交互与顶层定位，base-select 菜单沿用主题表面、橙色选中项与勾选标记；Phosphor 箭头距右边 12px，文本预留 38px。应用中打开菜单时 Esc 优先关闭菜单。",
       "html": "<span class=\"ds-desktop-select\"><select aria-label=\"视频清晰度\"><option>1080p · 1920×1080</option><option>720p · 1280×720</option></select><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 256 256\" fill=\"currentColor\" aria-hidden=\"true\"><path d=\"M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z\"></path></svg></span>",
       "css": ".ds-desktop-select { font-family: 'MiSans', 'Mi Sans', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif; font-synthesis: none; position: relative; display: inline-flex; min-width: 0; max-width: 100%; font-size: 0.8125rem; flex-shrink: 0; } .ds-desktop-select select { appearance: none; width: 100%; min-height: 32px; border: 1px solid var(--line, #dedbd5); border-radius: 8px; background: var(--surface, #fffdf9); color: var(--ink, #383838); padding: 4px 38px 4px 10px; font: inherit; } .ds-desktop-select > svg { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); pointer-events: none; color: var(--ink-secondary, #69645e); } .ds-desktop-select select:focus-visible { outline: 2px solid var(--accent, #b6450f); outline-offset: 2px; }\n@supports (appearance: base-select) {\n  .ds-desktop-select select,\n  .ds-desktop-select select::picker(select) {\n    appearance: base-select;\n  }\n  .ds-desktop-select select::picker-icon {\n    display: none;\n  }\n  .ds-desktop-select select {\n    cursor: pointer;\n    align-items: center;\n  }\n  .ds-desktop-select select:open {\n    border-color: var(--accent, #b6450f);\n  }\n  .ds-desktop-select select::picker(select) {\n    min-width: anchor-size(width);\n    max-width: calc(100vw - 24px);\n    max-height: min(280px, calc(100dvh - 32px));\n    margin-block: 4px;\n    padding: 4px;\n    border: 0;\n    border-radius: 10px;\n    background: var(--surface, #fffdf9);\n    color: var(--ink, #383838);\n    box-shadow: var(--menu-shadow, 0 6px 20px rgb(56 45 30 / 0.18));\n    font:\n      400 0.8125rem / 1.5 'MiSans',\n      'Mi Sans',\n      'PingFang SC',\n      'Microsoft YaHei',\n      system-ui,\n      sans-serif;\n    overflow: auto;\n    overscroll-behavior: contain;\n  }\n  .ds-desktop-select option {\n    display: flex;\n    align-items: center;\n    gap: 12px;\n    min-height: 34px;\n    padding: 7px 10px;\n    border-radius: 6px;\n    font: inherit;\n    color: var(--ink, #383838);\n    cursor: pointer;\n  }\n  .ds-desktop-select option:hover {\n    background: var(--surface-muted, #eeeae4);\n  }\n  .ds-desktop-select option:checked {\n    color: var(--accent, #b6450f);\n    background: var(--surface-muted, #eeeae4);\n    font-weight: 600;\n  }\n  .ds-desktop-select option:focus-visible {\n    outline: 2px solid var(--accent, #b6450f);\n    outline-offset: -2px;\n  }\n  .ds-desktop-select option::checkmark {\n    order: 1;\n    margin-left: auto;\n    color: var(--accent, #b6450f);\n  }\n  .ds-desktop-select select:disabled,\n  .ds-desktop-select option:disabled {\n    cursor: not-allowed;\n  }\n  .ds-desktop-select option:disabled {\n    opacity: 0.5;\n  }\n}\n@media (forced-colors: active) {\n  .ds-desktop-select ::-webkit-scrollbar-thumb {\n    background-color: CanvasText;\n  }\n  .ds-desktop-select select::picker(select) {\n    border: 1px solid CanvasText;\n  }\n}\n"
+    },
+    {
+      "name": "桌面翻译进度",
+      "kind": "custom",
+      "description": "翻译参数折叠后仍显示的任务状态与计数；实际界面另有取消、继续与定位操作。示例不执行模型调用。",
+      "html": "<div class=\"ds-translation-progress\"><div class=\"ds-translation-label\"><span>正在翻译 · 简体中文</span><span>12 / 20</span></div><progress aria-label=\"字幕翻译进度\" value=\"12\" max=\"20\"></progress></div>",
+      "css": ".ds-translation-progress { font-family: \"MiSans\", \"Mi Sans\", \"PingFang SC\", \"Microsoft YaHei\", system-ui, sans-serif; color: var(--ink, #383838); margin-top: 8px; } .ds-translation-label { display: flex; justify-content: space-between; gap: 8px; font-size: 0.6875rem; font-variant-numeric: tabular-nums; } .ds-translation-progress progress { width: 100%; height: 5px; display: block; margin: 8px 0; border: 0; border-radius: 4px; overflow: hidden; } .ds-translation-progress progress::-webkit-progress-bar { background: var(--surface-muted, #eeeae4); } .ds-translation-progress progress::-webkit-progress-value { background: var(--accent, #b6450f); }"
     }
   ],
   "narrative": {

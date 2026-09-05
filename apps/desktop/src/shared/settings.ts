@@ -1,3 +1,4 @@
+import { validSubtitleAppearance, type SubtitleAppearance } from './subtitle-appearance';
 export type ThemePreference = 'system' | 'light' | 'dark';
 export type ApiProtocol = 'auto' | 'chat-completions' | 'responses';
 export interface ProviderConfig {
@@ -6,12 +7,14 @@ export interface ProviderConfig {
   protocol: ApiProtocol;
 }
 export interface SettingsSnapshot {
+  subtitles: SubtitleAppearance;
   theme: ThemePreference;
   provider: ProviderConfig;
   keyStatus: 'missing' | 'saved' | 'session' | 'unavailable';
   encryptionAvailable: boolean;
 }
 export type SettingsCommand =
+  | { action: 'subtitles'; subtitles: SubtitleAppearance }
   | { action: 'draft'; dirty: boolean }
   | { action: 'read' }
   | { action: 'theme'; theme: ThemePreference }
@@ -41,6 +44,7 @@ export function isSettingsCommand(value: unknown): value is SettingsCommand {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const c = value as Record<string, unknown>;
   const keys = Object.keys(c);
+  if (c.action === 'subtitles') return keys.length === 2 && validSubtitleAppearance(c.subtitles);
   if (c.action === 'draft') return keys.length === 2 && typeof c.dirty === 'boolean';
   if (['read', 'test', 'cancel-test'].includes(c.action as string)) return keys.length === 1;
   if (c.action === 'theme')

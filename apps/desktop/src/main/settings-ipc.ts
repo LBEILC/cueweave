@@ -118,7 +118,6 @@ export function registerSettingsIpc(options: {
         const settings = await store.update(
           command.action === 'theme' ? { theme: command.theme } : command,
         );
-        if (command.action === 'save') dirty = false;
         nativeTheme.themeSource = settings.theme;
         return { ok: true, value: { settings } };
       } finally {
@@ -143,7 +142,7 @@ export function registerSettingsIpc(options: {
     if (!dirty) return true;
     const answer = await dialog.showMessageBox(window, {
       type: 'question',
-      title: 'AI 配置尚未保存',
+      title: '设置尚未保存',
       message: '返回设置保存，或放弃修改并退出。',
       buttons: ['返回设置', '放弃修改并退出'],
       defaultId: 0,

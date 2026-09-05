@@ -8,6 +8,8 @@ import {
 import { useState } from 'react';
 import type { ProjectCommand, ProjectSnapshot } from '../../../shared/project';
 import { SelectControl } from './SelectControl';
+import { TranslationTools } from './TranslationTools';
+import type { ProviderConfig } from '../../../shared/settings';
 
 export function ProjectHeader({
   canCreate,
@@ -37,16 +39,22 @@ export function ProjectHeader({
 }
 
 export function ProjectTools({
+  provider,
   project,
   busy,
   run,
+  onSeekMissing,
 }: {
+  provider: ProviderConfig | null;
   project: ProjectSnapshot;
   busy: boolean;
   run: (command: ProjectCommand) => Promise<boolean>;
+  onSeekMissing: (cueId: string) => void;
 }) {
   const [format, setFormat] = useState<'srt' | 'vtt'>('srt');
-  const [original, setOriginal] = useState(false);
+  const [content, setContent] = useState('edited');
+  const [partial, setPartial] = useState(false);
+  const translated = content === 'translation' || content === 'bilingual';
   const base = { projectId: project.id, baseRevision: project.revision };
   return (
     <div className="project-tools">
@@ -96,6 +104,14 @@ export function ProjectTools({
           <ArrowClockwiseIcon size={18} aria-hidden="true" />
         </button>
       </div>
+      <TranslationTools
+        provider={provider}
+        key={project.activeTrackId}
+        project={project}
+        busy={busy}
+        run={run}
+        onSeekMissing={onSeekMissing}
+      />
       <details className="project-export">
         <summary>导出字幕</summary>
         <div className="project-export-options">
@@ -103,11 +119,20 @@ export function ProjectTools({
             内容
             <SelectControl
               aria-label="导出内容"
-              value={original ? 'original' : 'edited'}
-              onChange={(e) => setOriginal(e.target.value === 'original')}
+              value={content}
+              onChange={(e) => {
+                setContent(e.target.value);
+                setPartial(false);
+              }}
             >
               <option value="edited">编辑后字幕</option>
               <option value="original">原始字幕</option>
+              <option value="translation" disabled={!project.translation?.completed}>
+                译文
+              </option>
+              <option value="bilingual" disabled={!project.translation?.completed}>
+                双语字幕
+              </option>
             </SelectControl>
           </label>
           <label>
@@ -121,10 +146,36 @@ export function ProjectTools({
               <option value="vtt">WebVTT</option>
             </SelectControl>
           </label>
+          {translated &&
+            project.translation &&
+            project.translation.completed < project.translation.total && (
+              <label className="partial-export">
+                <input
+                  type="checkbox"
+                  checked={partial}
+                  onChange={(event) => setPartial(event.target.checked)}
+                />
+                仅导出已完成部分（{project.translation.completed} / {project.translation.total} 条）
+              </label>
+            )}
           <button
             className="quiet-button"
-            disabled={busy || !project.cues.length}
-            onClick={() => void run({ action: 'export', ...base, format, original })}
+            disabled={
+              busy ||
+              !project.cues.length ||
+              (translated &&
+                (!project.translation?.completed ||
+                  (!partial && project.translation.completed < project.translation.total)))
+            }
+            onClick={() =>
+              void run({
+                action: 'export',
+                ...base,
+                format,
+                original: content === 'original',
+                ...(translated ? { mode: content as 'translation' | 'bilingual', partial } : {}),
+              })
+            }
           >
             <DownloadSimpleIcon size={17} aria-hidden="true" />
             导出文件

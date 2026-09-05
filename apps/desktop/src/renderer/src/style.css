@@ -1510,3 +1510,217 @@ textarea {
     padding-inline: 24px;
   }
 }
+
+/* Caption settings use the same renderer as the player. */
+.subtitle-overlay {
+  font-size: calc(clamp(1rem, 2.2vw, 1.5rem) * var(--caption-scale, 1));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+}
+.caption-line {
+  display: block;
+  max-width: 100%;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--caption-background, transparent);
+  overflow-wrap: anywhere;
+}
+.caption-preview {
+  position: relative;
+  height: 180px;
+  overflow: hidden;
+  border-radius: 8px;
+  background: #30302f;
+}
+.caption-preview-label {
+  position: absolute;
+  top: 12px;
+  left: 16px;
+  color: #c4c4c0;
+  font-size: 0.75rem;
+}
+.caption-preview .subtitle-overlay {
+  font-size: calc(1.125rem * var(--caption-scale, 1));
+}
+.subtitle-settings,
+.subtitle-settings fieldset {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+.subtitle-settings fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+.subtitle-setting-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.subtitle-setting-pair label {
+  display: grid;
+  gap: 8px;
+}
+.subtitle-setting-pair .select-control,
+.subtitle-setting-pair select {
+  width: 100%;
+}
+.subtitle-slider {
+  display: grid;
+  gap: 6px;
+}
+.subtitle-slider > span {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+.subtitle-slider output {
+  color: var(--ink-secondary);
+  font-variant-numeric: tabular-nums;
+}
+.subtitle-slider input {
+  width: 100%;
+  accent-color: var(--accent);
+}
+.subtitle-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.subtitle-toggle input {
+  accent-color: var(--accent);
+  width: 16px;
+  height: 16px;
+}
+.translation-tools {
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+}
+.translation-tools summary {
+  cursor: pointer;
+  font-size: 0.75rem;
+}
+.translation-start {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 8px;
+  margin-top: 8px;
+}
+.translation-start label {
+  display: grid;
+  gap: 4px;
+  font-size: 0.75rem;
+}
+.translation-start .primary-button {
+  min-height: 34px;
+}
+.translation-progress {
+  margin-top: 8px;
+}
+.translation-progress-label {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 0.6875rem;
+  font-variant-numeric: tabular-nums;
+}
+.translation-progress progress {
+  width: 100%;
+  height: 5px;
+  display: block;
+  margin: 8px 0;
+  border: 0;
+  border-radius: 4px;
+  overflow: hidden;
+}
+.translation-progress progress::-webkit-progress-bar {
+  background: var(--surface-muted);
+}
+.translation-progress progress::-webkit-progress-value {
+  background: var(--accent);
+}
+.translation-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.translation-actions button {
+  font-size: 0.6875rem;
+}
+.cue-text > span {
+  display: block;
+}
+.cue-translation {
+  margin-top: 5px;
+  color: var(--ink);
+}
+.cue-translation small {
+  display: block;
+  color: var(--ink-secondary);
+  font-size: 0.625rem;
+}
+.cue-editor-modes {
+  display: flex;
+  gap: 4px;
+}
+.cue-editor-modes [aria-pressed='true'] {
+  color: var(--accent);
+  background: var(--surface-muted);
+}
+.translation-source-context {
+  margin: 0;
+  padding: 8px;
+  background: var(--surface-muted);
+  color: var(--ink-secondary);
+  white-space: pre-wrap;
+  max-height: 80px;
+  overflow: auto;
+}
+.project-export-options .partial-export {
+  display: flex;
+  flex-basis: 100%;
+  align-items: center;
+  gap: 6px;
+}
+.partial-export input {
+  accent-color: var(--accent);
+}
+
+.cue-editor {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+.cue-editor-body {
+  min-height: 0;
+  overflow: auto;
+}
+.cue-editor-heading,
+.cue-editor > .primary-button {
+  flex: none;
+}
+.cue-editor > .primary-button {
+  align-self: flex-start;
+}
+.subtitle-panel:has(.cue-editor) > .project-tools,
+.subtitle-panel:has(.cue-editor) > .subtitle-source-options {
+  display: none;
+}
+@media (max-height: 650px) {
+  .cue-editor .translation-source-context {
+    display: none;
+  }
+}
+.translation-provider {
+  margin-top: 8px;
+  color: var(--ink-secondary);
+  font-size: 0.6875rem;
+  overflow-wrap: anywhere;
+}

@@ -2,6 +2,11 @@ import { readFile, mkdir, open, rename, rm } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import {
+  parseSubtitleAppearance,
+  validSubtitleAppearance,
+  type SubtitleAppearance,
+} from '../shared/subtitle-appearance';
+import {
   normalizeProvider,
   validProvider,
   type SettingsSnapshot,
@@ -15,6 +20,7 @@ export interface SecretStorage {
   decryptString(value: Buffer): string;
 }
 interface StoredSettings {
+  subtitles?: SubtitleAppearance;
   version: 1;
   theme: ThemePreference;
   provider: ProviderConfig;
@@ -41,6 +47,7 @@ export class SettingsStore {
         value.version !== 1 ||
         !['system', 'light', 'dark'].includes(value.theme) ||
         !validProvider(value.provider) ||
+        (value.subtitles !== undefined && !validSubtitleAppearance(value.subtitles)) ||
         (value.encryptedKey !== undefined && typeof value.encryptedKey !== 'string')
       )
         throw new Error();
@@ -64,6 +71,7 @@ export class SettingsStore {
       }
     }
     return {
+      subtitles: parseSubtitleAppearance(this.data.subtitles),
       theme: this.data.theme,
       provider: { ...this.data.provider },
       keyStatus,
@@ -82,6 +90,7 @@ export class SettingsStore {
     }
   }
   update(change: {
+    subtitles?: SubtitleAppearance;
     theme?: ThemePreference;
     provider?: ProviderConfig;
     key?: string;
@@ -90,6 +99,7 @@ export class SettingsStore {
     const pending = this.queue.then(async () => {
       if (!this.loaded) throw new Error('设置尚未加载，请重试。');
       const next = { ...this.data, ...(change.theme ? { theme: change.theme } : {}) };
+      if (change.subtitles) next.subtitles = parseSubtitleAppearance(change.subtitles);
       let sessionKey = this.sessionKey;
       if (change.provider) {
         next.provider = normalizeProvider(change.provider);

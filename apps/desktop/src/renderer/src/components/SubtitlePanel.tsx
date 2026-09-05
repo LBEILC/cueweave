@@ -11,6 +11,8 @@ export interface SubtitleCue {
   start: number;
   end: number;
   text: string;
+  translation?: string | undefined;
+  manual?: boolean | undefined;
 }
 
 function timestamp(seconds: number) {
@@ -51,7 +53,9 @@ export function SubtitlePanel({
     () =>
       cues
         .map((cue, index) => ({ cue, index }))
-        .filter(({ cue }) => cue.text.toLocaleLowerCase().includes(search)),
+        .filter(({ cue }) =>
+          `${cue.text}\n${cue.translation ?? ''}`.toLocaleLowerCase().includes(search),
+        ),
     [cues, search],
   );
   return (
@@ -120,7 +124,15 @@ export function SubtitlePanel({
                       {index === activeIndex ? '当前' : String(index + 1).padStart(2, '0')}
                     </span>
                   </span>
-                  <span className="cue-text">{cue.text}</span>
+                  <span className="cue-text">
+                    <span>{cue.text}</span>
+                    {cue.translation && (
+                      <span className="cue-translation">
+                        {cue.translation}
+                        {cue.manual && <small>已校对</small>}
+                      </span>
+                    )}
+                  </span>
                 </button>
                 {onEdit && (
                   <button

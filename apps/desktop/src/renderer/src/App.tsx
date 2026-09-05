@@ -22,6 +22,9 @@ import { ProjectHeader, ProjectTools } from './components/ProjectTools';
 import { CueEditor } from './components/CueEditor';
 import { useProject } from './use-project';
 import { SettingsPage } from './components/SettingsPage';
+import { SubtitleOverlay } from './components/SubtitleOverlay';
+import { DEFAULT_SUBTITLE_APPEARANCE } from '../../shared/subtitle-appearance';
+import type { ProviderConfig } from '../../shared/settings';
 import type {
   AppInfo,
   LinkImportProgress,
@@ -42,6 +45,16 @@ const idlePlayer: PlayerState = {
 };
 
 export function App() {
+  const [providerConfig, setProviderConfig] = useState<ProviderConfig | null>(null);
+  const [subtitleAppearance, setSubtitleAppearance] = useState(DEFAULT_SUBTITLE_APPEARANCE);
+  useEffect(() => {
+    void window.cueweave.settingsCommand({ action: 'read' }).then((result) => {
+      if (result.ok) {
+        setSubtitleAppearance(result.value.settings.subtitles);
+        setProviderConfig(result.value.settings.provider);
+      }
+    });
+  }, []);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const settingsButtonRef = useRef<HTMLButtonElement>(null);
   const [about, setAbout] = useState(false);
@@ -105,9 +118,11 @@ export function App() {
             start: cue.startMs / 1000,
             end: cue.endMs / 1000,
             text: cue.text,
+            translation: project.translation?.cues[cue.id],
+            manual: project.translation?.manualCueIds.includes(cue.id),
           }))
         : subtitleCues,
-    [project?.cues, subtitleCues],
+    [project?.cues, project?.translation, subtitleCues],
   );
   const editingCue = project?.cues.find((cue) => cue.id === editingCueId);
   const lastCheckpointRef = useRef(0);
@@ -592,6 +607,11 @@ export function App() {
     .filter((cue) => subtitleTimePosition >= cue.start && subtitleTimePosition < cue.end)
     .map((cue) => cue.text)
     .join('\n');
+  const visibleTranslation = displayedCues
+    .filter((cue) => subtitleTimePosition >= cue.start && subtitleTimePosition < cue.end)
+    .map((cue) => cue.translation ?? '')
+    .filter(Boolean)
+    .join('\n');
 
   const subtitleTools = (
     <>
@@ -926,7 +946,11 @@ export function App() {
                       }
                     />
                   )}
-                  {visibleSubtitle && <div className="subtitle-overlay">{visibleSubtitle}</div>}
+                  <SubtitleOverlay
+                    source={visibleSubtitle}
+                    translation={visibleTranslation}
+                    appearance={subtitleAppearance}
+                  />
                   <div className="player-status" role="status" aria-live="polite">
                     {player.phase === 'loading' && (
                       <>
@@ -956,9 +980,18 @@ export function App() {
                   tools={
                     project && (
                       <ProjectTools
+                        provider={providerConfig}
                         project={project}
                         busy={projects.busy || projects.dirty}
                         run={projects.run}
+                        onSeekMissing={(cueId) => {
+                          const index = project.cues.findIndex((cue) => cue.id === cueId);
+                          if (index < 0) return;
+                          seekTo(project.cues[index]!.startMs / 1000);
+                          document
+                            .querySelector(`[data-cue-index="${index}"]`)
+                            ?.scrollIntoView({ block: 'center' });
+                        }}
                       />
                     )
                   }
@@ -968,6 +1001,20 @@ export function App() {
                       <CueEditor
                         key={`${project.id}:${editingCue.id}:${project.revision}`}
                         cue={editingCue}
+                        translation={project.translation?.cues[editingCue.id]}
+                        onSaveTranslation={
+                          project.translation
+                            ? (text) =>
+                                projects.run({
+                                  action: 'edit-translation',
+                                  projectId: project.id,
+                                  baseRevision: project.revision,
+                                  translationId: project.translation!.id,
+                                  cueId: editingCue.id,
+                                  text,
+                                })
+                            : undefined
+                        }
                         durationMs={project.durationMs}
                         busy={projects.busy}
                         onDirty={projects.setDirty}
@@ -1124,6 +1171,8 @@ export function App() {
       </main>
       {settingsOpen && (
         <SettingsPage
+          onProvider={setProviderConfig}
+          onSubtitles={setSubtitleAppearance}
           onClose={() => {
             setSettingsOpen(false);
             requestAnimationFrame(() => settingsButtonRef.current?.focus());

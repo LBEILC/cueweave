@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { SettingsStore, type SecretStorage } from './settings-store';
 import { isSettingsCommand, normalizeProvider } from '../shared/settings';
+import { DEFAULT_SUBTITLE_APPEARANCE } from '../shared/subtitle-appearance';
 
 const folders: string[] = [];
 const secrets: SecretStorage = {
@@ -28,6 +29,21 @@ afterEach(async () => {
   for (const dir of folders.splice(0)) await rm(dir, { recursive: true, force: true });
 });
 describe('desktop settings storage', () => {
+  it('loads legacy settings with subtitle defaults and persists display preferences independently of credentials', async () => {
+    const { path, store } = await fixture();
+    await store.update({ provider, key: 'display-test-secret' });
+    expect(store.snapshot().subtitles).toEqual(DEFAULT_SUBTITLE_APPEARANCE);
+    const subtitles = {
+      ...DEFAULT_SUBTITLE_APPEARANCE,
+      sizePercent: 125,
+      positionPercent: 12,
+      backgroundEnabled: false,
+    };
+    await store.update({ subtitles });
+    const reopened = new SettingsStore(path, secrets);
+    expect((await reopened.load()).subtitles).toEqual(subtitles);
+    expect(reopened.key()).toBe('display-test-secret');
+  });
   it('persists encrypted credentials and theme without exposing the key in snapshots', async () => {
     const { path, store } = await fixture();
     await Promise.all([

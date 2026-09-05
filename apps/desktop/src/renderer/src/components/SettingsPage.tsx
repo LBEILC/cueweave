@@ -7,6 +7,8 @@ import {
   SpinnerGapIcon,
 } from '@phosphor-icons/react';
 import { SelectControl } from './SelectControl';
+import { SubtitleSettings } from './SubtitleSettings';
+import type { SubtitleAppearance } from '../../../shared/subtitle-appearance';
 import {
   normalizeProvider,
   type SettingsSnapshot,
@@ -15,7 +17,16 @@ import {
   type ThemePreference,
 } from '../../../shared/settings';
 
-export function SettingsPage({ onClose }: { onClose: () => void }) {
+export function SettingsPage({
+  onClose,
+  onSubtitles,
+  onProvider,
+}: {
+  onClose: () => void;
+  onSubtitles: (value: SubtitleAppearance) => void;
+  onProvider: (value: ProviderConfig) => void;
+}) {
+  const [subtitleDirty, setSubtitleDirty] = useState(false);
   const [settings, setSettings] = useState<SettingsSnapshot | null>(null);
   const [provider, setProvider] = useState<ProviderConfig>({
     baseUrl: '',
@@ -31,10 +42,11 @@ export function SettingsPage({ onClose }: { onClose: () => void }) {
   const heading = useRef<HTMLHeadingElement>(null);
   const continueEditing = useRef<HTMLButtonElement>(null);
   const mounted = useRef(true);
-  const dirty = Boolean(
+  const apiDirty = Boolean(
     settings &&
     (JSON.stringify(provider) !== JSON.stringify(settings.provider) || key || removeKey),
   );
+  const dirty = apiDirty || subtitleDirty;
   useEffect(() => {
     void window.cueweave.settingsCommand({ action: 'draft', dirty });
   }, [dirty]);
@@ -75,7 +87,14 @@ export function SettingsPage({ onClose }: { onClose: () => void }) {
       return;
     }
     setSettings(result.value.settings);
+    if (command.action === 'subtitles') {
+      onSubtitles(result.value.settings.subtitles);
+      setSubtitleDirty(false);
+      setMessage('字幕样式已保存。');
+      return;
+    }
     if (command.action === 'save') {
+      onProvider(result.value.settings.provider);
       setProvider(result.value.settings.provider);
       setKey('');
       setRemoveKey(false);
@@ -121,7 +140,7 @@ export function SettingsPage({ onClose }: { onClose: () => void }) {
         <div className="settings-content">
           {leaving && (
             <div className="settings-leave" role="alert">
-              <p>AI 配置尚未保存，要放弃这次修改吗？</p>
+              <p>设置尚未保存，要放弃这次修改吗？</p>
               <div className="settings-actions">
                 <button
                   ref={continueEditing}
@@ -179,6 +198,13 @@ export function SettingsPage({ onClose }: { onClose: () => void }) {
                   <p className="field-help">切换后立即生效，重启后保持。</p>
                 </div>
               </section>
+              <SubtitleSettings
+                key={JSON.stringify(settings.subtitles)}
+                saved={settings.subtitles}
+                disabled={Boolean(busy)}
+                onDirty={setSubtitleDirty}
+                onSave={(subtitles) => run({ action: 'subtitles', subtitles })}
+              />
               <section className="settings-section" aria-labelledby="provider-title">
                 <div className="settings-section-label">
                   <h2 id="provider-title">AI 服务</h2>
@@ -323,7 +349,7 @@ export function SettingsPage({ onClose }: { onClose: () => void }) {
                     <button
                       type="submit"
                       className="primary-button"
-                      disabled={Boolean(busy) || !dirty}
+                      disabled={Boolean(busy) || !apiDirty}
                     >
                       {busy === 'save' ? '正在保存…' : '保存配置'}
                     </button>
@@ -344,7 +370,7 @@ export function SettingsPage({ onClose }: { onClose: () => void }) {
                         className="secondary-button"
                         disabled={
                           Boolean(busy) ||
-                          dirty ||
+                          apiDirty ||
                           !settings.provider.baseUrl ||
                           !settings.provider.model ||
                           !['saved', 'session'].includes(settings.keyStatus)
@@ -356,7 +382,7 @@ export function SettingsPage({ onClose }: { onClose: () => void }) {
                     )}
                   </div>
                   <p className="field-help">
-                    {dirty
+                    {apiDirty
                       ? '保存配置后可测试连接。'
                       : '测试会发送一条短请求，可能产生少量 API 费用；不会发送视频或字幕。'}
                   </p>
@@ -376,7 +402,7 @@ export function SettingsPage({ onClose }: { onClose: () => void }) {
             <p>
               {busy === 'test'
                 ? '正在等待模型响应…'
-                : message || (dirty ? '有未保存的 AI 配置' : '设置已保存')}
+                : message || (dirty ? '有未保存的设置' : '设置已保存')}
             </p>
           )}
         </div>
