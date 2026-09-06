@@ -27,6 +27,7 @@ import {
 } from '../domain/subtitle/ai';
 import type { TranslationProgressStage } from './types';
 import type { ProviderRuntime } from './runtime';
+import { diagnosticError, diagnosticResponse, redactProviderDiagnostic } from './diagnostics';
 import { SubtitleResponseError } from './completeOutput';
 import { translateFirstPass, type SubtitleJsonRequest } from './firstPass';
 import { translationPolicy, type TranslationMode } from './translationPolicy';
@@ -652,16 +653,61 @@ export async function testProviderConnection(
   settings: ProviderSettings,
   runtime: ProviderRuntime = {},
 ): Promise<ProviderTestResult> {
-  await postProviderResponse(
-    settings,
-    [
-      { role: 'system', content: 'Reply with exactly READY.' },
-      { role: 'user', content: 'Connection test.' },
-    ],
-    undefined,
-    undefined,
-    runtime,
-  );
+  const attempts: string[] = [];
+  const testRuntime: ProviderRuntime = {
+    ...runtime,
+    fetch: async (input, init) => {
+      const lines = [`请求: ${init?.method ?? 'GET'} ${String(input)}`];
+      try {
+        const response = await (runtime.fetch ?? fetch)(input, init);
+        lines.push(`HTTP: ${response.status} ${response.statusText}`);
+        if (!response.ok) {
+          const body = await diagnosticResponse(response.clone());
+          if (body) lines.push(`服务响应:\n${body}`);
+        }
+        return response;
+      } catch (error) {
+        lines.push(`底层错误: ${diagnosticError(error)}`);
+        throw error;
+      } finally {
+        attempts.push(lines.join('\n'));
+      }
+    },
+  };
+  try {
+    await postProviderResponse(
+      settings,
+      [
+        { role: 'system', content: 'Reply with exactly READY.' },
+        { role: 'user', content: 'Connection test.' },
+      ],
+      undefined,
+      undefined,
+      testRuntime,
+    );
+  } catch (error) {
+    const failure =
+      error instanceof ProviderError
+        ? error
+        : new ProviderError('network', '模型连接测试失败，请展开错误详情。');
+    failure.details = redactProviderDiagnostic(
+      [
+        `错误类型: ${failure.code}`,
+        `接口协议: ${settings.protocol}`,
+        `Base URL: ${settings.baseUrl}`,
+        `模型: ${settings.model}`,
+        ...attempts,
+        diagnosticError(error),
+        ...(failure.code === 'network' && !attempts.some((attempt) => attempt.includes('HTTP:'))
+          ? [
+              '未收到 HTTP 响应。浏览器可能只提供 Failed to fetch，无法据此区分网络、跨域、证书或权限问题。',
+            ]
+          : []),
+      ].join('\n\n'),
+      settings,
+    );
+    throw failure;
+  }
   return {
     ok: true,
     message: `连接成功，${settings.model} 可以处理字幕。`,

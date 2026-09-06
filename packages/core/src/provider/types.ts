@@ -21,6 +21,7 @@ export type ProviderProtocol = 'auto' | 'chat-completions' | 'responses';
 export interface ProviderTestResult {
   ok: boolean;
   message: string;
+  details?: string;
 }
 
 export interface ProviderFailure {
@@ -29,6 +30,7 @@ export interface ProviderFailure {
 }
 
 export class ProviderError extends Error {
+  details?: string;
   constructor(
     readonly code: ProviderErrorCode,
     message: string,

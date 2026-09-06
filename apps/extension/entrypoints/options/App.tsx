@@ -40,6 +40,7 @@ import {
   saveProviderSettings,
 } from '../../src/provider/settings';
 import type { ProviderSettings } from '@cueweave/core/provider/types';
+import { diagnosticError, redactProviderDiagnostic } from '@cueweave/core/provider/diagnostics';
 import { UPDATE_SUBTITLE_PREFERENCES_MESSAGE } from '../../src/platform/youtube/types';
 import {
   DEFAULT_SUBTITLE_PREFERENCES,
@@ -86,6 +87,7 @@ export function App() {
   const [activeSection, setActiveSection] = useState('provider');
   const [saveState, setSaveState] = useState<SaveState>('idle');
   const [message, setMessage] = useState('');
+  const [errorDetails, setErrorDetails] = useState('');
   const [displaySaveState, setDisplaySaveState] = useState<SaveState>('idle');
   const [displayMessage, setDisplayMessage] = useState('');
   const [cacheStats, setCacheStats] = useState<TranslationCacheStats>();
@@ -166,6 +168,7 @@ export function App() {
   };
 
   const updateField = (field: keyof ProviderSettings, value: string) => {
+    setErrorDetails('');
     setSettings((current) => ({ ...current, [field]: value }));
     setSaveState('idle');
     setMessage('');
@@ -208,6 +211,7 @@ export function App() {
   };
 
   const saveAndTest = async () => {
+    setErrorDetails('');
     setSaveState('saving');
     setMessage('正在保存设置并测试模型连接。');
 
@@ -229,8 +233,10 @@ export function App() {
       const result = await sendProviderTest();
       setSaveState(result.ok ? 'success' : 'error');
       setMessage(result.message);
+      setErrorDetails(result.ok ? '' : (result.details ?? result.message));
     } catch (error) {
       setSaveState('error');
+      setErrorDetails(redactProviderDiagnostic(diagnosticError(error), settings));
       setMessage(error instanceof Error ? error.message : '设置保存失败，请检查后重试。');
     }
   };
@@ -426,6 +432,12 @@ export function App() {
                   )}
                   <span>{message}</span>
                 </p>
+              )}
+              {saveState === 'error' && errorDetails && (
+                <details className="connection-error-details">
+                  <summary>错误详情</summary>
+                  <pre>{errorDetails}</pre>
+                </details>
               )}
             </form>
           </section>

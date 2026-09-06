@@ -212,7 +212,12 @@ Object.assign(globalThis, {
           case 'cueweave:test-provider':
             await previewDelay();
             return scenario === 'failure'
-              ? { ok: false, message: '示例连接失败，请检查服务地址与 API Key 后重试。' }
+              ? {
+                  ok: false,
+                  message: '示例连接失败，请检查服务地址与 API Key 后重试。',
+                  details:
+                    '错误类型: network\n\n接口协议: chat-completions\n\n请求: POST https://provider.example/v1/chat/completions\n\n底层错误: TypeError: Failed to fetch\n\n未收到 HTTP 响应。浏览器可能只提供 Failed to fetch，无法据此区分网络、跨域、证书或权限问题。',
+                }
               : { ok: true, message: '示例连接测试成功。预览未向模型发送请求。' };
           case 'cueweave:update-subtitle-preferences':
             await previewDelay();

@@ -683,6 +683,7 @@ export default defineBackground(() => {
         .then(testProviderConnection)
         .catch((error: unknown) => ({
           ok: false,
+          details: error instanceof ProviderError ? error.details : undefined,
           message:
             error instanceof Error
               ? error.message

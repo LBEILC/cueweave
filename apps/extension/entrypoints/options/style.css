@@ -418,6 +418,35 @@
   color: var(--danger);
   background: var(--danger-wash);
 }
+.connection-error-details {
+  margin-top: 12px;
+  color: var(--ink-secondary);
+  font-size: 0.8125rem;
+}
+.connection-error-details summary {
+  width: fit-content;
+  padding-block: 8px;
+  cursor: pointer;
+  color: var(--ink);
+}
+.connection-error-details summary:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 4px;
+}
+.connection-error-details pre {
+  max-height: 320px;
+  overflow: auto;
+  padding: 16px;
+  margin: 8px 0 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-muted);
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: inherit;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
 .visually-hidden {
   position: absolute;
   width: 1px;
