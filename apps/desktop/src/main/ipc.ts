@@ -193,6 +193,32 @@ export function registerAppIpc(options: {
       return desktopError('UNAVAILABLE');
     }
   });
+  ipcMain.handle(DESKTOP_CHANNELS.mediaReveal, async (event, request: unknown) => {
+    const rejected = guardSender(event);
+    if (rejected) return rejected;
+    if (
+      typeof request !== 'object' ||
+      request === null ||
+      Array.isArray(request) ||
+      Object.keys(request).length !== 1 ||
+      !('id' in request) ||
+      typeof request.id !== 'string'
+    )
+      return desktopError('INVALID_REQUEST');
+    const path = options.media.getPath(request.id);
+    if (!path) return desktopError('NOT_FOUND');
+    try {
+      if (!(await stat(path)).isFile()) return desktopError('NOT_FOUND');
+    } catch {
+      return desktopError('NOT_FOUND');
+    }
+    try {
+      shell.showItemInFolder(path);
+      return { ok: true, value: null };
+    } catch {
+      return desktopError('UNAVAILABLE');
+    }
+  });
   ipcMain.handle(DESKTOP_CHANNELS.linkInspect, async (event, request: unknown) => {
     const value = authenticatedLinkRequest(event, request);
     if ('ok' in value) return value;
@@ -434,6 +460,7 @@ export function registerAppIpc(options: {
     ipcMain.removeHandler(DESKTOP_CHANNELS.mediaPick);
     ipcMain.removeHandler(DESKTOP_CHANNELS.mediaDrop);
     ipcMain.removeHandler(DESKTOP_CHANNELS.mediaProbe);
+    ipcMain.removeHandler(DESKTOP_CHANNELS.mediaReveal);
     ipcMain.removeHandler(DESKTOP_CHANNELS.linkInspect);
     ipcMain.removeHandler(DESKTOP_CHANNELS.linkImportStart);
     ipcMain.removeHandler(DESKTOP_CHANNELS.linkImportCancel);

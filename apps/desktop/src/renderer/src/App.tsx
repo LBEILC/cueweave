@@ -5,6 +5,7 @@ import type { OnlineSubtitleSource } from '../../shared/online-translation';
 import { SelectControl } from './components/SelectControl';
 import {
   ArrowsOutIcon,
+  FolderOpenIcon,
   InfoIcon,
   GearSixIcon,
   PauseIcon,
@@ -830,6 +831,24 @@ export function App() {
                   )}
                 </p>
               </div>
+              {asset && (
+                <button
+                  type="button"
+                  className="quiet-button"
+                  onClick={async () => {
+                    const result = await window.cueweave.revealMedia(asset.id);
+                    if (!result.ok)
+                      setError(
+                        result.error.code === 'NOT_FOUND'
+                          ? '找不到视频文件，可能已被移动或删除。'
+                          : '无法打开文件所在位置，请稍后重试。',
+                      );
+                  }}
+                >
+                  <FolderOpenIcon size={18} aria-hidden="true" />
+                  打开文件所在位置
+                </button>
+              )}
               <button
                 type="button"
                 className="quiet-button"

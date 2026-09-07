@@ -14,6 +14,7 @@ export const DESKTOP_CHANNELS = {
   mediaPick: 'cueweave:media:pick',
   mediaDrop: 'cueweave:media:drop',
   mediaProbe: 'cueweave:media:probe',
+  mediaReveal: 'cueweave:media:reveal',
   linkInspect: 'cueweave:link:inspect',
   linkImportStart: 'cueweave:link:import-start',
   linkImportCancel: 'cueweave:link:import-cancel',
@@ -160,6 +161,7 @@ export interface DesktopBridge {
   pickMedia: () => Promise<DesktopResult<MediaAsset | null>>;
   registerDroppedMedia: (file: unknown) => Promise<DesktopResult<MediaAsset>>;
   probeMedia: (id: string) => Promise<DesktopResult<MediaProbe>>;
+  revealMedia: (id: string) => Promise<DesktopResult<null>>;
   inspectLink: (url: string, authMode: SiteAuthMode) => Promise<DesktopResult<LinkPreview>>;
   startLinkImport: (
     url: string,

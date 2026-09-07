@@ -6,10 +6,12 @@ import type { SiteAuthManager } from './site-auth';
 import { registerAppIpc } from './ipc';
 import { APP_URL } from './security';
 import { DESKTOP_CHANNELS } from '../shared/bridge';
+import { fileURLToPath } from 'node:url';
 
 const mocks = vi.hoisted(() => ({
   handlers: new Map<string, (event: IpcMainInvokeEvent, request: unknown) => unknown>(),
   openPath: vi.fn(),
+  showItemInFolder: vi.fn(),
   showOpenDialog: vi.fn(),
 }));
 vi.mock('electron', () => ({
@@ -18,7 +20,7 @@ vi.mock('electron', () => ({
       mocks.handlers.set(channel, handler),
     removeHandler: (channel: string) => mocks.handlers.delete(channel),
   },
-  shell: { openPath: mocks.openPath },
+  shell: { openPath: mocks.openPath, showItemInFolder: mocks.showItemInFolder },
   dialog: { showOpenDialog: mocks.showOpenDialog },
 }));
 
@@ -32,6 +34,7 @@ describe('fixed desktop IPC', () => {
   beforeEach(() => {
     mocks.handlers.clear();
     mocks.openPath.mockReset();
+    mocks.showItemInFolder.mockReset();
     mocks.showOpenDialog.mockReset();
     dispose = registerAppIpc({
       window: { isDestroyed: () => false, webContents: { id: 7 } } as unknown as BrowserWindow,
@@ -40,7 +43,7 @@ describe('fixed desktop IPC', () => {
       fontLicensePath: '/bundled/fonts/MiSans-LICENSE.pdf',
       media: {
         register: vi.fn(),
-        getPath: vi.fn(),
+        getPath: vi.fn((id: string) => (id === 'local' ? fileURLToPath(import.meta.url) : null)),
         getPlayableSource: vi.fn((id: string) =>
           id === 'registered-asset' ? 'C:\\media\\sample.mp4' : null,
         ),
@@ -63,6 +66,23 @@ describe('fixed desktop IPC', () => {
       ok: true,
       value: { name: 'CueWeave', version: 'test-version' },
     });
+  });
+
+  it('reveals only registered local files from the trusted window', async () => {
+    const reveal = mocks.handlers.get(DESKTOP_CHANNELS.mediaReveal)!;
+    expect(await reveal(source, { id: 'local' })).toEqual({ ok: true, value: null });
+    expect(mocks.showItemInFolder).toHaveBeenCalledWith(fileURLToPath(import.meta.url));
+    mocks.showItemInFolder.mockClear();
+    expect(await reveal(source, { id: 'remote' })).toMatchObject({ error: { code: 'NOT_FOUND' } });
+    expect(await reveal(source, { id: 'local', path: 'C:\\private' })).toMatchObject({
+      error: { code: 'INVALID_REQUEST' },
+    });
+    expect(
+      await reveal({ ...source, senderFrame: null } as IpcMainInvokeEvent, { id: 'local' }),
+    ).toMatchObject({ error: { code: 'FORBIDDEN' } });
+    expect(mocks.showItemInFolder).not.toHaveBeenCalled();
+    dispose();
+    expect(mocks.handlers.has(DESKTOP_CHANNELS.mediaReveal)).toBe(false);
   });
 
   it('rejects malformed or path-bearing requests before performing actions', async () => {

@@ -17,6 +17,10 @@ import type {
 } from '../shared/bridge';
 
 const bridge: DesktopBridge = {
+  revealMedia: (id) =>
+    (
+      ipcRenderer.invoke(DESKTOP_CHANNELS.mediaReveal, { id }) as Promise<DesktopResult<null>>
+    ).catch(() => desktopError('UNAVAILABLE')),
   onlineTranslation: (command) =>
     (
       ipcRenderer.invoke(DESKTOP_CHANNELS.onlineTranslation, command) as Promise<
