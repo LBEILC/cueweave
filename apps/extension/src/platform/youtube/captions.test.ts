@@ -190,4 +190,33 @@ describe('parseJson3Captions', () => {
       },
     ]);
   });
+
+  it('does not silently substitute a different language when the fallback lacks English', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          captions: {
+            playerCaptionsTracklistRenderer: {
+              captionTracks: [
+                {
+                  baseUrl: track.baseUrl.replace('lang=en', 'lang=ru'),
+                  languageCode: 'ru',
+                  kind: 'asr',
+                },
+              ],
+            },
+          },
+        }),
+      ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(
+      fetchCaptionTrackViaInnertube({
+        videoId: 'test',
+        apiKey: 'page-key',
+        preferredLanguageCode: 'en',
+      }),
+    ).rejects.toThrow('没有返回可用字幕轨');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
 });
